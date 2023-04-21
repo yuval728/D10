@@ -5,12 +5,14 @@ from django_extensions.db.models import TimeStampedModel
 
 def user_directory_path(instance, filename):
     # file will be uploaded to MEDIA_ROOT/user_<id>/<filename>
-    return 'userData/{0}/profilePictures/{1}'.format(instance.id, filename)
+    print(instance.id)
+    print(instance)
+    return 'userData/{0}/profilePictures/{1}'.format(instance, filename)
 class User(TimeStampedModel):
     id=models.AutoField(primary_key=True)
-    userName=models.CharField(max_length=100,blank=True)
+    username=models.CharField(max_length=100,blank=True)
     email=models.EmailField(max_length=100,unique=True)
-    password=models.CharField(max_length=100)
+    password=models.CharField(max_length=128)
     phoneNumber=models.CharField(max_length=15,unique=True)
     profilePicture=models.ImageField(upload_to=user_directory_path,blank=True)
     
@@ -18,7 +20,7 @@ class User(TimeStampedModel):
         return self.id
     
     def __str__(self):
-        return self.userName
+        return str(self.id)
     
     
     
@@ -30,7 +32,7 @@ class UserStatus(TimeStampedModel):
     user=models.OneToOneField(User,on_delete=models.CASCADE)
     
     def __str__(self):
-        return self.user.userName+" "+str(self.status)
+        return self.user.username+" "+str(self.status)
     
     def setStatus(self):
         self.status=not self.status
@@ -51,7 +53,7 @@ class UserFriend(TimeStampedModel):
     status=models.CharField(max_length=100,default='friends')
     
     def __str__(self):
-        return self.user1.userName+" "+self.user2.userName+" "+self.status
+        return self.user1.username+" "+self.user2.username+" "+self.status
 
 class UserFriendRequest(TimeStampedModel):
     id=models.AutoField(primary_key=True)
@@ -60,7 +62,7 @@ class UserFriendRequest(TimeStampedModel):
     status=models.CharField(max_length=100,default='pending')
     
     def __str__(self):
-        return self.user1.userName+" "+self.user2.userName+" "+self.status
+        return self.user1.username+" "+self.user2.username+" "+self.status
 
 
 def group_directory_path(instance, filename):
@@ -86,7 +88,7 @@ class UserGroup(TimeStampedModel):
     status=models.CharField(max_length=100,default='member')
     
     def __str__(self):
-        return self.user.userName+" "+self.group.groupName+" "+self.status
+        return self.user.username+" "+self.group.groupName+" "+self.status
 
 
 class UserChat(TimeStampedModel):
@@ -152,5 +154,5 @@ class GroupChatStatus(TimeStampedModel):
     status=models.CharField(max_length=100,default='unread')
     
     def __str__(self):
-        return self.groupChat.id+" "+self.user.userName+" "+self.status
+        return self.groupChat.id+" "+self.user.username+" "+self.status
 

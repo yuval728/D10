@@ -35,7 +35,7 @@ class Migration(migrations.Migration):
                 ('created', django_extensions.db.fields.CreationDateTimeField(auto_now_add=True, verbose_name='created')),
                 ('modified', django_extensions.db.fields.ModificationDateTimeField(auto_now=True, verbose_name='modified')),
                 ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('userName', models.CharField(blank=True, max_length=100)),
+                ('username', models.CharField(blank=True, max_length=100)),
                 ('email', models.EmailField(max_length=100, unique=True)),
                 ('password', models.CharField(max_length=100)),
                 ('phoneNumber', models.CharField(max_length=15, unique=True)),
