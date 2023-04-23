@@ -5,6 +5,19 @@ from django.db.models import Q
 from django.contrib.auth.hashers import make_password, check_password
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+class TokenObtainPairSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token =  super(TokenObtainPairSerializer, cls).get_token(user)
+        # Add custom claims
+        token['username'] = user.username
+        token['email'] = user.email
+        # token['userId'] = user.id
+        # token['phoneNumber'] = user.phoneNumber
+        # token['profilePicture'] = user.profilePicture
+        # ...
+        return token
+    
 class UserSerializer(serializers.ModelSerializer): #HyperlinkedModelSerializer
     id = serializers.IntegerField(read_only=True)
     username = serializers.CharField(max_length=100)
@@ -21,66 +34,40 @@ class UserSerializer(serializers.ModelSerializer): #HyperlinkedModelSerializer
     
     def create(self, validated_data):
         validated_data['email'] = validated_data['email'].lower()
-        self.validate_emailPhoneNum(validated_data['email'], validated_data['phoneNumber'])
-        self.validate_username(validated_data['username'])
-        # self.validate(validated_data)
-        validated_data['password'] = self.hashPassword(validated_data['password'])
-        return User.objects.create(**validated_data)
+        validated_data['username']= validated_data['username'].lower()
+        user = User.objects.filter(Q(email=validated_data['email']) | Q(username=validated_data['username']) | Q(phoneNumber=validated_data['phoneNumber'])).first()
+        if user:
+            if user.email == validated_data['email']:
+                raise serializers.ValidationError({'error': 'Email already exists'})
+            if user.username == validated_data['username']:
+                raise serializers.ValidationError({'error': 'Username already exists'})
+            if user.phoneNumber == validated_data['phoneNumber']:
+                raise serializers.ValidationError({'error': 'Phone No already exists'})
+                
+        validated_data['password'] = make_password(validated_data['password'])
+        user=  User.objects.create(**validated_data)
+        return user
     
-    async def update(self, instance, validated_data):
+    def update(self, instance, validated_data):
         instance.username=validated_data.get('username',instance.username)
         instance.email=validated_data.get('email',instance.email)
         instance.password=validated_data.get('password',instance.password)
         instance.phoneNumber=validated_data.get('phoneNumber',instance.phoneNumber)
         instance.profilePicture=validated_data.get('profilePicture',instance.profilePicture)
-        await instance.save()
+        instance.save()
         return instance
     
-    async def delete(self, instance):
-        await instance.delete()
-        return 
-    
-    async def partial_update(self, instance, validated_data):
-        # instance.username=validated_data.get('username',instance.username)
-        # instance.email=validated_data.get('email',instance.email)
-        # instance.password=validated_data.get('password',instance.password)
-        # instance.phoneNumber=validated_data.get('phoneNumber',instance.phoneNumber)
-        instance.profilePicture=validated_data.get('profilePicture',instance.profilePicture)
-        await instance.save()
-        return instance
-    
-    def validate_username(self, username):
-        if  User.objects.filter(username=username).exists():
-            raise serializers.ValidationError("Username already exists")
-        return username
-    
-    def validate_emailPhoneNum(self, email, phoneNumber):
-        if User.objects.filter(Q(email=email) | Q(phoneNumber=phoneNumber)).exists():
-            raise serializers.ValidationError("Email or Phone Number already exists")
-        return [email, phoneNumber]
-    
-    def hashPassword(self, password):
-        return make_password(password)
-    
-    # def validate(self, data):
-    #     if data['password'] != data['confirm_password']:
-    #         raise serializers.ValidationError("Passwords do not match")
-    #     return data
+    # async def partial_update(self, instance, validated_data):
+    #     # instance.username=validated_data.get('username',instance.username)
+    #     # instance.email=validated_data.get('email',instance.email)
+    #     # instance.password=validated_data.get('password',instance.password)
+    #     # instance.phoneNumber=validated_data.get('phoneNumber',instance.phoneNumber)
+    #     instance.profilePicture=validated_data.get('profilePicture',instance.profilePicture)
+    #     await instance.save()
+    #     return instance
     
     
     
         
 
-class TokenObtainPairSerializer(TokenObtainPairSerializer):
-    @classmethod
-    def get_token(cls, user):
-        token =  super(TokenObtainPairSerializer, cls).get_token(user)
-        # Add custom claims
-        token['username'] = user.username
-        token['email'] = user.email
-        # token['userId'] = user.id
-        # token['phoneNumber'] = user.phoneNumber
-        # token['profilePicture'] = user.profilePicture
-        # ...
-        return token
     

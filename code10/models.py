@@ -22,6 +22,9 @@ class User(TimeStampedModel):
     def __str__(self):
         return str(self.id)
     
+    @property
+    def is_authenticated(self):
+        return True
     
     
 class UserStatus(TimeStampedModel):
@@ -34,17 +37,17 @@ class UserStatus(TimeStampedModel):
     def __str__(self):
         return self.user.username+" "+str(self.status)
     
-    def setStatus(self):
-        self.status=not self.status
-        self.save()
+    # def setStatus(self):
+    #     self.status=not self.status
+    #     self.save()
     
-    def setShow(self):
-        self.show=not self.show
-        self.save()
+    # def setShow(self):
+    #     self.show=not self.show
+    #     self.save()
         
-    def setLastLogin(self):
-        self.lastLogin=timezone.now()
-        self.save()
+    # def setLastLogin(self):
+    #     self.lastLogin=timezone.now()
+    #     self.save()
     
 class UserFriend(TimeStampedModel):
     id=models.AutoField(primary_key=True)

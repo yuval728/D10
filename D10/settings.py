@@ -43,7 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'debug_toolbar',
     'rest_framework',
-    # 'rest_framework.authtoken'
+    'rest_framework.authtoken',
     'rest_framework_simplejwt',
     'django_extensions',
     'code10',
@@ -84,7 +84,7 @@ TEMPLATES = [
     },
 ]
 
-# WSGI_APPLICATION = 'D10.wsgi.application'
+WSGI_APPLICATION = 'D10.wsgi.application'
 ASGI_APPLICATION = 'D10.asgi.application'
 
 
@@ -153,14 +153,12 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 10,
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        # 'rest_framework.authentication.TokenAuthentication',
     ),
-    # 'DEFAULT_AUTHENTICATION_CLASSES': (
-    #            'rest_framework.authentication.TokenAuthentication',
-    # ),
     'DEFAULT_PERMISSION_CLASSES':(
                 'rest_framework.permissions.IsAuthenticated',
-                'rest_framework.permissions.IsAdminUser',
-                'rest_framework.permissions.AllowAny',
+                # 'rest_framework.permissions.IsAdminUser',
+                # 'rest_framework.permissions.AllowAny',
     ),
 
 }

@@ -11,6 +11,7 @@ pillow = "*"
 mysqlclient = "*"
 djangorestframework = "*"
 djangorestframework-simplejwt = "*"
+uvicorn = "*"
 
 [dev-packages]
 
