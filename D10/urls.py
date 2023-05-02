@@ -21,14 +21,12 @@ from rest_framework import routers
 from code10 import views
 
 router = routers.DefaultRouter()
-# router.register(r'users', views.UserView.as_view(), basename='users')
-
-
+# router.register(r'myprofile', views.UserProfile.as_view(), basename='myprofile')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('__debug__/', include(debug_toolbar.urls)),
-    # path(r'', include(router.urls)),
+    path(r'', include(router.urls)),
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
     path('', include('code10.urls'))
     

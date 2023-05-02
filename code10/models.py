@@ -1,12 +1,12 @@
 from django.db import models
 from django_extensions.db.models import TimeStampedModel
-
+from django.utils import timezone
 # Create your models here.
 
 def user_directory_path(instance, filename):
     # file will be uploaded to MEDIA_ROOT/user_<id>/<filename>
-    print(instance.id)
-    print(instance)
+    # print(instance.id)
+    # print(instance)
     return 'userData/{0}/profilePictures/{1}'.format(instance, filename)
 class User(TimeStampedModel):
     id=models.AutoField(primary_key=True)
@@ -14,6 +14,7 @@ class User(TimeStampedModel):
     email=models.EmailField(max_length=100,unique=True)
     password=models.CharField(max_length=128)
     phoneNumber=models.CharField(max_length=15,unique=True)
+    verified=models.BooleanField(default=False)
     profilePicture=models.ImageField(upload_to=user_directory_path,blank=True)
     
     def __uuid__(self):
@@ -22,10 +23,9 @@ class User(TimeStampedModel):
     def __str__(self):
         return str(self.id)
     
-    @property
-    def is_authenticated(self):
-        return True
-    
+    def setVerified(self):
+        self.verified=True
+        self.save()    
     
 class UserStatus(TimeStampedModel):
     id=models.AutoField(primary_key=True)
@@ -33,22 +33,56 @@ class UserStatus(TimeStampedModel):
     lastLogin=models.DateTimeField(blank=True,null=True)
     show=models.BooleanField(default=True)
     user=models.OneToOneField(User,on_delete=models.CASCADE)
+    # readReceipt=models.BooleanField(default=True)
     
     def __str__(self):
         return self.user.username+" "+str(self.status)
     
-    # def setStatus(self):
-    #     self.status=not self.status
-    #     self.save()
+    def setStatus(self, status):
+        self.status=status
+        self.save()
     
-    # def setShow(self):
-    #     self.show=not self.show
-    #     self.save()
+    def setShow(self):
+        self.show=not self.show
+        self.save()
         
-    # def setLastLogin(self):
-    #     self.lastLogin=timezone.now()
-    #     self.save()
+    def setLastLogin(self):
+        self.lastLogin=timezone.now()
+        self.save()
+
+class UserOTP(TimeStampedModel):
+    id=models.AutoField(primary_key=True)
+    otp=models.CharField(max_length=6)
+    expiry=models.DateTimeField(blank=True,null=True)
+    user=models.OneToOneField(User,on_delete=models.CASCADE)
     
+    def __str__(self):
+        return self.user.username+" "+self.otp
+    
+    def setExpiry(self):
+        self.expiry=timezone.now()
+        self.save()
+    
+class UserOldPassword(TimeStampedModel):
+    id=models.AutoField(primary_key=True)
+    password=models.CharField(max_length=128)
+    user=models.ForeignKey(User,on_delete=models.CASCADE)
+    
+    def __str__(self):
+        return self.user.username+" "+self.password
+    
+
+# ? Learn more about device token
+# class UserDevice(TimeStampedModel):
+#     id=models.AutoField(primary_key=True)
+#     deviceName=models.CharField(max_length=100)
+#     deviceToken=models.CharField(max_length=100)
+#     user=models.ForeignKey(User,on_delete=models.CASCADE)
+    
+#     def __str__(self):
+#         return self.deviceName+" "+self.deviceToken+" "+self.user.username
+
+
 class UserFriend(TimeStampedModel):
     id=models.AutoField(primary_key=True)
     user1=models.ForeignKey(User,on_delete=models.CASCADE,related_name='user1')
@@ -93,7 +127,7 @@ class UserGroup(TimeStampedModel):
     def __str__(self):
         return self.user.username+" "+self.group.groupName+" "+self.status
 
-
+# ? Try with UserFriend Model rather than using user1 and user2
 class UserChat(TimeStampedModel):
     id=models.AutoField(primary_key=True)
     user1=models.ForeignKey(User,on_delete=models.CASCADE,related_name='sender')

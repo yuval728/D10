@@ -5,6 +5,8 @@ from .models import *
 
 admin.site.register(User)
 admin.site.register(UserStatus)
+admin.site.register(UserOldPassword)
+admin.site.register(UserOTP)
 admin.site.register(UserFriend)
 admin.site.register(UserFriendRequest)
 admin.site.register(UserChat)
