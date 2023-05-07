@@ -67,12 +67,9 @@ def register(request):
             data= {'user': user, 'password': make_password(request.data['password'])}
             try:
                 userstatus=UserStatus.objects.create(user=data['user'])
-            except Exception as e:
-                print("Error in creating status")
-                print(e)
                 userpassword=UserOldPassword.objects.create(user=data['user'], password=data['password'])
             except Exception as e:
-                print("Error in creating old password")
+                print("Error ")
                 print(e)
             
             return Response(serializer.data,status=status.HTTP_201_CREATED)
@@ -87,21 +84,23 @@ def register(request):
 @permission_classes([permissions.AllowAny])
 def login(request):
     try:
-        user= User.objects.get(username=request.data['username'])
-        if user:
-            if check_password(request.data['password'], user.password):
-                serializer=  UserSerializer(user)
-                token= TokenObtainPairSerializer.get_token(user)
-                
-                userStatus= UserStatus.objects.get(user=serializer.data['id'])
-                userStatus.setStatus(True)
-                userStatus= UserStatusSerializer(userStatus)
-                
-                return Response({'user': serializer.data, 'access': str(token.access_token), 'refresh': str(token), 'status': userStatus.data}, status=status.HTTP_200_OK)
-            else:
-                return Response({'error': 'Invalid Credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            user= User.objects.get(username=request.data['username'])
+        except Exception as e:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        # if user:
+        if check_password(request.data['password'], user.password):
+            serializer=  UserSerializer(user)
+            token= TokenObtainPairSerializer.get_token(user)
             
-        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            userStatus= UserStatus.objects.get(user=serializer.data['id'])
+            userStatus.setStatus(True)
+            userStatus= UserStatusSerializer(userStatus)
+            
+            return Response({'user': serializer.data, 'access': str(token.access_token), 'refresh': str(token), 'status': userStatus.data}, status=status.HTTP_200_OK)
+        else:
+            return Response({'error': 'Invalid Credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+            
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -220,3 +219,57 @@ def verifyUser(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 
+@api_view(['POST'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([permissions.IsAuthenticated])
+def forgotPassword(request):
+    try:
+        if request.user:
+            otp, expiry= generateOTP()
+            
+            try:
+                userotp=UserOTP.objects.get(user=request.user['id'])
+                userotp.otp=otp
+                userotp.expiry=expiry
+                userotp.save()
+            except:
+                UserOTP.objects.create(user=request.user.instance, otp=otp, expiry=expiry)
+            return Response({'otp': otp,'msg':'OTP has been sent'}, status=status.HTTP_200_OK)    
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['PATCH'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([permissions.IsAuthenticated])
+def resetPassword(request):
+    try:
+        if request.user:
+            try:
+                checkOtp= UserOTP.objects.get(user=request.user['id'])
+            except:
+                return Response({'error': 'OTP not found'}, status=status.HTTP_404_NOT_FOUND)
+            if checkOtp.expiry < timezone.now():
+                return Response({'error': 'OTP expired'}, status=status.HTTP_400_BAD_REQUEST)
+            if checkOtp.otp != request.data['otp']:
+                return Response({'error': 'Invalid OTP'}, status=status.HTTP_400_BAD_REQUEST)
+            checkOtp.setExpiry()
+            
+            useroldpassword=UserOldPassword.objects.filter(user=request.user['id'])
+            for oldpassword in useroldpassword:
+                if check_password(request.data['password'], oldpassword.password):
+                    return Response({'error': 'Password already used'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            password=make_password(request.data['password'])
+            UserOldPassword.objects.create(user=request.user.instance, password=password)
+            userserialize=UserSerializer(request.user.instance, data={'password':password}, context={'request': request}, partial=True)
+            if userserialize.is_valid():
+                userserialize.save()
+                return Response({'msg': 'Password reset successfully'}, status=status.HTTP_200_OK)
+
+            return Response(userserialize.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        

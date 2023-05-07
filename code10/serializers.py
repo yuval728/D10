@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.contrib.auth.hashers import make_password, check_password
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+
 class TokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
@@ -34,7 +35,7 @@ class UserSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         validated_data['email'] = validated_data['email'].lower()
-        validated_data['username']= validated_data['username']
+        validated_data['username']= validated_data['username'].lower()
         user = User.objects.filter(Q(email=validated_data['email']) | Q(username=validated_data['username']) | Q(phoneNumber=validated_data['phoneNumber'])).first()
         if user:
             if user.email == validated_data['email']:
@@ -43,7 +44,7 @@ class UserSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'error': 'Username already exists'})
             if user.phoneNumber == validated_data['phoneNumber']:
                 raise serializers.ValidationError({'error': 'Phone No already exists'})
-                
+        validated_data['verified'] = False
         validated_data['password'] = make_password(validated_data['password'])
         user=  User.objects.create(**validated_data)
         # print(user)
@@ -60,20 +61,13 @@ class UserSerializer(serializers.ModelSerializer):
     
     def update(self, instance, validated_data):
         for attr, value in validated_data.items():
-            if attr == 'password':
-                instance.set_password(value)
-            else:
+            # if attr == 'password':
+            #     instance.set_password(value)
+            # else:
                 setattr(instance, attr, value)
                 # instance[attr] = value
         instance.save()
         return instance
-    
-    # def checkOldPasswords(self, user, password):
-    #     password=make_password(password)
-    #     userOldPasswords = UserOldPassword.objects.get(user=user, oldPassword=password)
-    #     if userOldPasswords:
-    #         return True
-    #     return False
     
     
 class UserStatusSerializer(serializers.ModelSerializer):
@@ -100,16 +94,4 @@ class UserStatusSerializer(serializers.ModelSerializer):
     #     instance.save()
     #     return instance
     
-# class UserOldPasswordSerializer(serializers.ModelSerializer):
-#     id = serializers.IntegerField(read_only=True)
-#     user = serializers.PrimaryKeyRelatedField(read_only=True)
-#     password = serializers.CharField(max_length=128, write_only=True)
-#     class Meta:
-#         model = UserOldPassword
-#         fields = '__all__'
-        
-#     def create(self, validated_data):
-#         print(validated_data)
-#         userOldPassword = UserOldPassword.objects.create(**validated_data)
-#         return userOldPassword
     
