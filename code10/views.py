@@ -4,6 +4,7 @@
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
+from django.db.models import Q
 
 from .authentication import CustomAuthentication, IsAuthenticatedAndVerified
 from rest_framework.authtoken.models import Token
@@ -273,3 +274,142 @@ def resetPassword(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
+
+@api_view(['POST'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def sendFriendRequest(request):
+    try:
+        if request.user:
+           
+            if str(request.user['id']) == request.data['friend']:  #? if friend is int or string
+                return Response({'error': 'You cannot send friend request to yourself'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                friend= User.objects.get(id=request.data['friend'])
+            except:
+                return Response({'error': 'Friend not found'}, status=status.HTTP_404_NOT_FOUND)
+            try:
+                
+                alreadyfriend=UserFriend.objects.filter( Q(user1=request.user['id'], user2=request.data['friend']) | Q(user1=request.data['friend'], user2=request.user['id']) )
+                if alreadyfriend:
+                    return Response({'error': 'You are already friends'}, status=status.HTTP_400_BAD_REQUEST)
+                
+                
+                friendrequest=UserFriendRequest.objects.get(user1=request.user['id'], user2=request.data['friend'])
+                if friendrequest.status=='accepted':
+                    return Response({'error': 'You are already friends'}, status=status.HTTP_400_BAD_REQUEST)
+                elif friendrequest.status=='pending':
+                    return Response({'error': 'Friend request already sent'}, status=status.HTTP_400_BAD_REQUEST)
+                elif friendrequest.status=='rejected':
+                    friendrequest.status='pending'
+                    friendrequest.save()
+                    return Response({'msg': 'Friend request sent'}, status=status.HTTP_200_OK)
+                elif friendrequest.status=='cancelled':
+                    friendrequest.status='pending'
+                    friendrequest.save()
+                    return Response({'msg': 'Friend request sent'}, status=status.HTTP_200_OK)
+                elif friendrequest.status=='blocked':
+                    return Response({'error': 'You have blocked this user'}, status=status.HTTP_400_BAD_REQUEST) #TODO: change message
+            except:
+                UserFriendRequest.objects.create(user1=request.user.instance, user2=friend, status='pending')
+                return Response({'msg': 'Friend request sent'}, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['PATCH'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def respondFriendRequest(request):
+    try:
+        if request.user:
+            try:
+                friendrequest=UserFriendRequest.objects.get(user2=request.user['id'], user1=int(request.data['friend'])) #? do with id or friend and check type 
+                # if friendrequest.status!='pending': #? check if friend request is pending and also for accepted
+                #     return Response({'error': 'Friend request not found'}, status=status.HTTP_404_NOT_FOUND)
+                
+                reqStatus=request.data['status']
+                if reqStatus!='accepted' and reqStatus!='rejected' and reqStatus!='blocked':
+                    return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
+                
+                friendrequest.status=reqStatus
+                friendrequest.save()
+                if reqStatus=='accepted':
+                    UserFriend.objects.create(user1=request.user.instance, user2=friendrequest.user1)
+                
+                return Response({'msg': f'Friend request {reqStatus}'}, status=status.HTTP_200_OK)
+            except:
+                return Response({'error': 'Friend request not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['PATCH'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def cancelFriendRequest(request):
+    try:
+        if request.user:
+            try:
+                friendrequest=UserFriendRequest.objects.get(user1=request.user['id'], user2=request.data['friend'])
+                if friendrequest.status!='pending':
+                    return Response({'error': 'Friend request not found'}, status=status.HTTP_404_NOT_FOUND)
+                
+                friendrequest.status='cancelled'
+                friendrequest.save()
+                
+                return Response({'msg': 'Friend request cancelled'}, status=status.HTTP_200_OK)
+            except:
+                return Response({'error': 'Friend request not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['GET'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def getFriendRequest(request):
+    try:
+        if request.user:
+            friendrequests=UserFriendRequest.objects.filter(user2=request.user['id'], status='pending').values('id', 'user1', 'user1__username', 'user1__profilePicture')
+            return Response({"friendrequests":friendrequests}, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)   
+  
+@api_view(['GET'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def sentFriendRequest(request):
+    try:
+        if request.user:
+            # if request.query_params:
+            #     try:
+            #         friendrequest=UserFriendRequest.objects.get(id=request.query_params['id'], user1=request.user['id'])
+            #         return Response({"friendrequest":friendrequest}, status=status.HTTP_200_OK)
+            #     except:
+            #         return Response({'error': 'Friend request not found'}, status=status.HTTP_404_NOT_FOUND)
+                
+            friendrequests=UserFriendRequest.objects.filter(user1=request.user['id'], status='pending').values('id', 'user2', 'user2__username', 'user2__profilePicture')
+            return Response({"friendrequests":friendrequests}, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)  
+    
+@api_view(['GET'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def getUserList(request):
+    try:
+        if request.user:
+           
+            if request.query_params and request.query_params['user']:
+                query=request.query_params['user']
+                users=User.objects.filter(username__icontains=query).values( 'id', 'username', 'profilePicture', 'verified')
+            else:
+                users=User.objects.values( 'id', 'username', 'profilePicture', 'verified')
+            return Response({"users":users}, status=status.HTTP_200_OK)
+            
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

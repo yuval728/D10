@@ -30,6 +30,6 @@ class CustomAuthentication(BaseAuthentication):
 # check if user is authenticated and verified
 class IsAuthenticatedAndVerified(permissions.BasePermission):
     def has_permission(self, request, view):
-        if request.user and request.user['is_authenticated'] and request.user['verified']:
+        if request.user and request.user.is_authenticated and request.user['verified']:
             return True
         return False

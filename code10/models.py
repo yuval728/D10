@@ -97,7 +97,7 @@ class UserFriendRequest(TimeStampedModel):
     user1=models.ForeignKey(User,on_delete=models.CASCADE,related_name='requester')
     user2=models.ForeignKey(User,on_delete=models.CASCADE,related_name='accepter')
     status=models.CharField(max_length=100,default='pending')
-    
+    # by=models.CharField(max_length=100,default='user1')
     def __str__(self):
         return self.user1.username+" "+self.user2.username+" "+self.status
 

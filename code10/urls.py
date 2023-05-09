@@ -11,6 +11,13 @@ urlpatterns = [
     path('verifyUser/', views.verifyUser, name='verifyUser'),
     path('forgotPassword/', views.forgotPassword, name='forgotPassword'),
     path('resetPassword/', views.resetPassword, name='resetPassword'),
-    # path('login2/', views.login2, name='login2'),
-    # path('myprofile2/', views.myProfile2, name='myprofile2'),
+    path('getUsers/', views.getUserList, name='getUsers'),
+    path('sendFriendRequest/', views.sendFriendRequest, name='sendFriendRequest'),
+    path('cancelFriendRequest/', views.cancelFriendRequest, name='cancelFriendRequest'),
+    path('respondToFriendRequest/', views.respondFriendRequest, name='respondToFriendRequest'),
+    path('sentFriendRequests/', views.sentFriendRequest, name='sentFriendRequests'),
+    # path('sentFriendRequests/<int:id>/', views.sentFriendRequest, name='sentFriendRequests'),
+    path('getFriendRequests/', views.getFriendRequest, name='receivedFriendRequests'),
+    # path('getFriendRequests/<int:id>/', views.getFriendRequest, name='receivedFriendRequests'),
+    
 ]

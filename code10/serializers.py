@@ -94,4 +94,44 @@ class UserStatusSerializer(serializers.ModelSerializer):
     #     instance.save()
     #     return instance
     
+class UserFriendRequestSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(read_only=True)
+    user1 = serializers.PrimaryKeyRelatedField(read_only=True)
+    user2 = serializers.PrimaryKeyRelatedField(read_only=True)
+    status = serializers.CharField(max_length=10, default='pending')
+    # by = serializers.CharField(max_length=10, default='user1')
     
+    class Meta:
+        model = UserFriendRequest
+        fields = '__all__'
+        
+    def create(self, validated_data):
+        # validated_data['status'] = 'pending'
+        # validated_data['by'] = 'user1'
+        userFriendRequest = UserFriendRequest.objects.create(**validated_data)
+        return userFriendRequest
+    
+    def update(self, instance, validated_data):
+        instance.status=validated_data.get('status',instance.status)
+        instance.save()
+        return instance
+    
+class UserFriendSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(read_only=True)
+    user1 = serializers.PrimaryKeyRelatedField(read_only=True)
+    user2 = serializers.PrimaryKeyRelatedField(read_only=True)
+    status = serializers.CharField(max_length=10)
+    
+    class Meta:
+        model = UserFriend
+        fields = '__all__'
+        
+    def create(self, validated_data):
+        # validated_data['status'] = 'friends'
+        userFriend = UserFriend.objects.create(**validated_data)
+        return userFriend
+    
+    def update(self, instance, validated_data):
+        instance.status=validated_data.get('status',instance.status)
+        instance.save()
+        return instance
