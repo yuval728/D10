@@ -88,6 +88,7 @@ class UserFriend(TimeStampedModel):
     user1=models.ForeignKey(User,on_delete=models.CASCADE,related_name='user1')
     user2=models.ForeignKey(User,on_delete=models.CASCADE,related_name='user2')
     status=models.CharField(max_length=100,default='friends')
+    by=models.CharField(max_length=100,default='',null=True)
     
     def __str__(self):
         return self.user1.username+" "+self.user2.username+" "+self.status
@@ -130,6 +131,7 @@ class UserGroup(TimeStampedModel):
 # ? Try with UserFriend Model rather than using user1 and user2
 class UserChat(TimeStampedModel):
     id=models.AutoField(primary_key=True)
+    friend=models.ForeignKey(UserFriend,on_delete=models.CASCADE)
     user1=models.ForeignKey(User,on_delete=models.CASCADE,related_name='sender')
     user2=models.ForeignKey(User,on_delete=models.CASCADE,related_name='receiver')
     message=models.TextField(blank=True)

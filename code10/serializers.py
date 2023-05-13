@@ -3,13 +3,13 @@ from rest_framework import serializers
 from .models import *
 from django.db.models import Q
 from django.contrib.auth.hashers import make_password, check_password
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenObtainSerializer
 
 
-class TokenObtainPairSerializer(TokenObtainPairSerializer):
+class TokenObtainPairSerializerAuth(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
-        token =  super(TokenObtainPairSerializer, cls).get_token(user)
+        token =  super(TokenObtainPairSerializerAuth, cls).get_token(user)
         # Add custom claims
         token['username'] = user.username
         token['email'] = user.email
@@ -17,6 +17,22 @@ class TokenObtainPairSerializer(TokenObtainPairSerializer):
         # token['phoneNumber'] = user.phoneNumber
         # token['profilePicture'] = user.profilePicture
         # ...
+        return token
+    
+class TokenObtainSerializerP2P(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls,user, friend):
+        
+        token = super(TokenObtainSerializerP2P, cls).get_token(user)
+        # Add custom claims
+        token['friend_id']= friend.id
+        if user.id == friend.user1.id:
+            token['friend_userId']= friend.user2.id
+        else:
+            token['friend_userId']= friend.user1.id
+            
+        # ...
+        
         return token
     
 class UserSerializer(serializers.ModelSerializer):
@@ -69,7 +85,7 @@ class UserSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
     
-    
+# * Not in use 
 class UserStatusSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
     user = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -82,18 +98,8 @@ class UserStatusSerializer(serializers.ModelSerializer):
         # fields = '__all__'
         fields = ('id', 'user', 'status', 'lastLogin', 'show')
         # extra_kwargs = {'user': {'read_only': True }}
-        
-    # def create(self, validated_data):
-    #     userStatus = UserStatus.objects.create(**validated_data)
-    #     return userStatus
     
-    # def update(self, instance, validated_data):
-    #     instance.status=validated_data.get('status',instance.status)
-    #     instance.lastLogin=validated_data.get('lastLogin',instance.lastLogin)
-    #     instance.show=validated_data.get('show',instance.show)
-    #     instance.save()
-    #     return instance
-    
+# * Not in use
 class UserFriendRequestSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
     user1 = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -116,6 +122,7 @@ class UserFriendRequestSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
     
+# * Not in use
 class UserFriendSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
     user1 = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -135,3 +142,6 @@ class UserFriendSerializer(serializers.ModelSerializer):
         instance.status=validated_data.get('status',instance.status)
         instance.save()
         return instance
+    
+# class UserChatSerializer(serializers.ListSerializer):
+    

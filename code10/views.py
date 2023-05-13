@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 
 from .utils.otp_generate import generateOTP
+import time
 
 # Create your views here.
 # Django token
@@ -92,7 +93,7 @@ def login(request):
         # if user:
         if check_password(request.data['password'], user.password):
             serializer=  UserSerializer(user)
-            token= TokenObtainPairSerializer.get_token(user)
+            token= TokenObtainPairSerializerAuth.get_token(user)
             
             userStatus= UserStatus.objects.get(user=serializer.data['id'])
             userStatus.setStatus(True)
@@ -290,10 +291,18 @@ def sendFriendRequest(request):
                 return Response({'error': 'Friend not found'}, status=status.HTTP_404_NOT_FOUND)
             try:
                 
-                alreadyfriend=UserFriend.objects.filter( Q(user1=request.user['id'], user2=request.data['friend']) | Q(user1=request.data['friend'], user2=request.user['id']) )
+                alreadyfriend=UserFriend.objects.filter( Q(user1=request.user['id'], user2=request.data['friend']) | Q(user1=request.data['friend'], user2=request.user['id']))
                 if alreadyfriend:
-                    return Response({'error': 'You are already friends'}, status=status.HTTP_400_BAD_REQUEST)
-                
+                    
+                    if alreadyfriend[0].status=='accepted':
+                        return Response({'error': 'You are already friends'}, status=status.HTTP_400_BAD_REQUEST)
+                    
+                    if alreadyfriend[0].status=='blocked':
+                        if alreadyfriend[0].by==str(request.user['id']):
+                            return Response({'error': 'You have blocked this user'}, status=status.HTTP_400_BAD_REQUEST)
+                        else:
+                            return Response({'error': 'You are blocked by this user'}, status=status.HTTP_400_BAD_REQUEST)
+                    
                 
                 friendrequest=UserFriendRequest.objects.get(user1=request.user['id'], user2=request.data['friend'])
                 if friendrequest.status=='accepted':
@@ -309,7 +318,7 @@ def sendFriendRequest(request):
                     friendrequest.save()
                     return Response({'msg': 'Friend request sent'}, status=status.HTTP_200_OK)
                 elif friendrequest.status=='blocked':
-                    return Response({'error': 'You have blocked this user'}, status=status.HTTP_400_BAD_REQUEST) #TODO: change message
+                    return Response({'error': 'You have blocked this user'}, status=status.HTTP_400_BAD_REQUEST) #TODO: change message to you are blocked by this user
             except:
                 UserFriendRequest.objects.create(user1=request.user.instance, user2=friend, status='pending')
                 return Response({'msg': 'Friend request sent'}, status=status.HTTP_200_OK)
@@ -323,23 +332,45 @@ def sendFriendRequest(request):
 def respondFriendRequest(request):
     try:
         if request.user:
+            mutable = request.data._mutable
+            request.data._mutable = True #? to make request.data mutable
             try:
-                friendrequest=UserFriendRequest.objects.get(user2=request.user['id'], user1=int(request.data['friend'])) #? do with id or friend and check type 
-                # if friendrequest.status!='pending': #? check if friend request is pending and also for accepted
-                #     return Response({'error': 'Friend request not found'}, status=status.HTTP_404_NOT_FOUND)
                 
-                reqStatus=request.data['status']
-                if reqStatus!='accepted' and reqStatus!='rejected' and reqStatus!='blocked':
-                    return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
+                request.data['friend']=int(request.data['friend'])
                 
-                friendrequest.status=reqStatus
-                friendrequest.save()
-                if reqStatus=='accepted':
-                    UserFriend.objects.create(user1=request.user.instance, user2=friendrequest.user1)
-                
-                return Response({'msg': f'Friend request {reqStatus}'}, status=status.HTTP_200_OK)
+                friendrequest=UserFriendRequest.objects.get(user2=request.user['id'], user1=request.data['friend'])
             except:
                 return Response({'error': 'Friend request not found'}, status=status.HTTP_404_NOT_FOUND)
+            #? do with id or friend and check type 
+            # if friendrequest.status!='pending': #? check if friend request is pending and also for accepted
+            #     return Response({'error': 'Friend request not found'}, status=status.HTTP_404_NOT_FOUND)
+                
+            reqStatus=request.data['status']
+            if reqStatus!='accepted' and reqStatus!='rejected' and reqStatus!='blocked':
+                return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            friendrequest.status=reqStatus
+            friendrequest.save()
+            # Todo: test it again with blocked status
+            if reqStatus=='accepted':
+                oldFriend=UserFriend.objects.filter( Q(user1=friendrequest.user1, user2=friendrequest.user2) | Q(user1=friendrequest.user2, user2=friendrequest.user1))
+                if oldFriend:
+                    if oldFriend[0].status=='accepted':
+                        return Response({'error': 'You are already friends'}, status=status.HTTP_400_BAD_REQUEST)
+                    if oldFriend[0].status=='blocked': 
+                        if oldFriend[0].by!=str(request.user['id']):
+                            return Response({'error': 'You are blocked by this user'}, status=status.HTTP_400_BAD_REQUEST)
+                        
+                    oldFriend[0].status='friends'
+                    oldFriend[0].by=''
+                    oldFriend[0].save()
+                else:
+                    UserFriend.objects.create(user1=friendrequest.user1, user2=friendrequest.user2, status='friend', by='')
+            
+            request.data._mutable = mutable
+            
+            return Response({'msg': f'Friend request {reqStatus}'}, status=status.HTTP_200_OK)
+        
     
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -409,6 +440,91 @@ def getUserList(request):
             else:
                 users=User.objects.values( 'id', 'username', 'profilePicture', 'verified')
             return Response({"users":users}, status=status.HTTP_200_OK)
+            
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['GET'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def getFriendList(request):
+    try:
+        if request.user:
+            if request.query_params and request.query_params['friend']:
+                query=request.query_params['friend']
+                friends=UserFriend.objects.filter(Q(user1=request.user['id']) | Q(user2=request.user['id']), Q(user1__username__icontains=query) | Q(user2__username__icontains=query)).values('id', 'user1', 'user1__username', 'user1__profilePicture', 'user2', 'user2__username', 'user2__profilePicture')
+            else:
+                friends=UserFriend.objects.filter(Q(user1=request.user['id']) | Q(user2=request.user['id'])).values('id', 'user1', 'user1__username', 'user1__profilePicture', 'user2', 'user2__username', 'user2__profilePicture')
+            return Response({"friends":friends}, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['PUT'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def updateFriendStatus(request):
+    try:
+        if request.user:
+            try:
+                resStatus=request.data['status']
+                if  resStatus!='blocked' and resStatus!='removed':
+                    return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
+                
+                friend=UserFriend.objects.get(id=request.data['id'])
+                if friend.user1.id!=request.user['id'] and friend.user2.id!=request.user['id']:
+                    return Response({'error': 'Friend not found'}, status=status.HTTP_404_NOT_FOUND)
+                
+                if friend.status=='blocked':
+                    if friend.by!=str(request.user['id']):
+                        return Response({'error': 'You are not authorized to unblock this friend'}, status=status.HTTP_401_UNAUTHORIZED)
+                    else:
+                        friend.status='removed'
+                        friend.save()
+                        return Response({'msg': 'Friend has been unblocked'}, status=status.HTTP_200_OK)
+                elif friend.status=='removed':
+                    return Response({'error': 'Friend not found'}, status=status.HTTP_404_NOT_FOUND)
+                else:
+                    friend.status=resStatus
+                    friend.by=request.user['id']
+                    friend.save()
+                    return Response({'msg': f'Friend has been {resStatus}'}, status=status.HTTP_200_OK)
+            
+            except:
+                return Response({'error': 'Friend not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['GET'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def getFriendToken(request):
+    try:
+        if request.user:
+            if not request.query_params or not request.query_params['friend']:
+               return Response({'error': 'query param friend is required'}, status=status.HTTP_400_BAD_REQUEST)
+            query=request.query_params['friend']
+            try:
+                begin=time.time()
+                # ? check if this is faster :: select_related is faster 
+                userFriend=UserFriend.objects.select_related('user1', 'user2').get(Q(user1=request.user['id'], user2__id=query) | Q(user2=request.user['id'], user1__id=query))
+            except Exception as e:
+                print(e)
+                return Response({'error': 'Friend not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+            if userFriend.status=='blocked':
+                if userFriend.by!=str(request.user['id']):
+                    return Response({'error': 'You are blocked by this user'}, status=status.HTTP_401_UNAUTHORIZED)
+            elif userFriend.status=='removed':
+                return Response({'error': 'Friend not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+            token=TokenObtainSerializerP2P.get_token(request.user.instance, userFriend)
+        
+            end=time.time()
+            print(end-begin)
+            return Response({'token': str(token.access_token)}, status=status.HTTP_200_OK)
             
     
     except Exception as e:

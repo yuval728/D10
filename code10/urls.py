@@ -19,5 +19,7 @@ urlpatterns = [
     # path('sentFriendRequests/<int:id>/', views.sentFriendRequest, name='sentFriendRequests'),
     path('getFriendRequests/', views.getFriendRequest, name='receivedFriendRequests'),
     # path('getFriendRequests/<int:id>/', views.getFriendRequest, name='receivedFriendRequests'),
-    
+    path ('getFriends/', views.getFriendList, name='getFriends'),
+    path('updateFriendShip/', views.updateFriendStatus, name='updateFriendShip'),
+    path('getFriendToken/', views.getFriendToken, name='getFriendToken'),
 ]
