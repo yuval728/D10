@@ -143,5 +143,4 @@ class UserFriendSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
     
-# class UserChatSerializer(serializers.ListSerializer):
     

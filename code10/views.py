@@ -6,7 +6,7 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from django.db.models import Q
 
-from .authentication import CustomAuthentication, IsAuthenticatedAndVerified
+from .authentication import CustomAuthentication, IsAuthenticatedAndVerified, P2PAuthentication
 from rest_framework.authtoken.models import Token
 
 from .models import *
@@ -353,7 +353,7 @@ def respondFriendRequest(request):
             friendrequest.save()
             # Todo: test it again with blocked status
             if reqStatus=='accepted':
-                oldFriend=UserFriend.objects.filter( Q(user1=friendrequest.user1, user2=friendrequest.user2) | Q(user1=friendrequest.user2, user2=friendrequest.user1))
+                oldFriend=UserFriend.objects.filter( Q(user1=friendrequest.user1, user2=friendrequest.user2) | Q(user1=friendrequest.user2, user2=friendrequest.user1)) # * Filter to get
                 if oldFriend:
                     if oldFriend[0].status=='accepted':
                         return Response({'error': 'You are already friends'}, status=status.HTTP_400_BAD_REQUEST)
@@ -510,8 +510,7 @@ def getFriendToken(request):
                 begin=time.time()
                 # ? check if this is faster :: select_related is faster 
                 userFriend=UserFriend.objects.select_related('user1', 'user2').get(Q(user1=request.user['id'], user2__id=query) | Q(user2=request.user['id'], user1__id=query))
-            except Exception as e:
-                print(e)
+            except:
                 return Response({'error': 'Friend not found'}, status=status.HTTP_404_NOT_FOUND)
             
             if userFriend.status=='blocked':
@@ -521,11 +520,29 @@ def getFriendToken(request):
                 return Response({'error': 'Friend not found'}, status=status.HTTP_404_NOT_FOUND)
             
             token=TokenObtainSerializerP2P.get_token(request.user.instance, userFriend)
-        
+            
+            # UserChat.objects.create(user1=userFriend.user1, user2=userFriend.user2, friend=userFriend, message='test')
             end=time.time()
             print(end-begin)
             return Response({'token': str(token.access_token)}, status=status.HTTP_200_OK)
             
     
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['GET'])
+@authentication_classes([P2PAuthentication])
+@permission_classes([])
+def testGet(request):
+    try:
+        begin=time.time()
+        if request.user:
+            user1=UserSerializer(request.user['user']).data
+            user2=UserSerializer(request.user['friend_user']).data
+            friend=UserFriendSerializer(request.user['friend']).data
+            end=time.time()
+            print(end-begin)
+            return Response({'user1': user1, 'user2': user2, 'friend': friend}, status=status.HTTP_200_OK)
+        return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

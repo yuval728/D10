@@ -135,14 +135,14 @@ class UserChat(TimeStampedModel):
     user1=models.ForeignKey(User,on_delete=models.CASCADE,related_name='sender')
     user2=models.ForeignKey(User,on_delete=models.CASCADE,related_name='receiver')
     message=models.TextField(blank=True)
-    status=models.CharField(max_length=100,default='unread')
+    status=models.CharField(max_length=100,default='unread') # ? boolean field
     
     def __str__(self):
         return str(self.id)
     
-    # def setStatus(self):
-    #     self.status=not self.status
-    #     self.save()
+    def setStatus(self):
+        self.status=not self.status
+        self.save()
 
 def userChatFile_directory_path(instance, filename):
     # TODO filename will be year/month/day/time-filename
