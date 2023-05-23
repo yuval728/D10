@@ -1,10 +1,11 @@
 # from django.shortcuts import render
-# from django.http import HttpResponse
+from django.http import HttpResponse, FileResponse
 # from django.contrib import messages
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from django.db.models import Q
+# from django.core.mail import send_mail
 
 from .authentication import CustomAuthentication, IsAuthenticatedAndVerified, P2PAuthentication
 from rest_framework.authtoken.models import Token
@@ -19,6 +20,9 @@ from rest_framework.decorators import api_view, permission_classes, authenticati
 
 from .utils.otp_generate import generateOTP
 import time
+
+# from django.views.decorators.csrf import csrf_exempt
+
 
 # Create your views here.
 # Django token
@@ -199,23 +203,28 @@ def verfiyUserRequest(request):
 def verifyUser(request):
     try:
         if request.user:
+            begin=time.time()
             if request.user['verified']:
                 return Response({'error': 'User is already verified'}, status=status.HTTP_400_BAD_REQUEST)
             try:
                 checkOtp= UserOTP.objects.get(user=request.user['id'])
             except:
                 return Response({'error': 'OTP not found'}, status=status.HTTP_404_NOT_FOUND)
+            # checkOtp=get_object_or_404(UserOTP, user=request.user['id'])
+            
             if checkOtp.expiry < timezone.now():
                 return Response({'error': 'OTP expired'}, status=status.HTTP_400_BAD_REQUEST)
             if checkOtp.otp != request.data['otp']:
                 return Response({'error': 'Invalid OTP'}, status=status.HTTP_400_BAD_REQUEST)
             checkOtp.setExpiry()
             
-            # User.objects.filter(id=request.user['id']).update(verified=True)
             request.user.instance.setVerified()
             
+            end=time.time()
+            print('Time taken: ', end-begin)
             return Response({'msg': 'User verified'}, status=status.HTTP_200_OK)
         
+        # print('User not found')
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -500,7 +509,7 @@ def updateFriendStatus(request):
 @api_view(['GET'])
 @authentication_classes([CustomAuthentication])
 @permission_classes([IsAuthenticatedAndVerified])
-def getFriendToken(request):
+def getFriendToken(request): #? Change this to request, friendId 
     try:
         if request.user:
             if not request.query_params or not request.query_params['friend']:
@@ -544,5 +553,253 @@ def testGet(request):
             print(end-begin)
             return Response({'user1': user1, 'user2': user2, 'friend': friend}, status=status.HTTP_200_OK)
         return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+class GroupViews(APIView):
+    authentication_classes=[CustomAuthentication]
+    permission_classes=[IsAuthenticatedAndVerified]
+    
+    def get(self, request):
+        try:
+            if not request.user:
+                return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+            
+            if request.query_params and request.query_params['group']:
+                query=request.query_params['group']
+                groups=Group.objects.filter(name__icontains=query).values('id', 'groupName','groupDescription', 'groupPicture', 'groupHash') #? remove groupHash
+            else:
+                groups=Group.objects.values('id', 'groupName','groupDescription')
+            return Response({"groups":groups}, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+    def post(self, request):
+        try:
+            if not request.user:
+                return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+            data={
+                'groupName': request.data['groupName'],
+                'groupDescription': request.data['groupDescription'] if 'groupDescription' in request.data else None,
+                'groupPicture': request.data['groupPicture'] if 'groupPicture' in request.data else None,
+                'createdBy': request.user['id'],
+                'groupPassword': request.data['groupPassword'],
+            }
+            serializer=GroupSerializer(data=data, context={'request': request})
+            if serializer.is_valid():
+                serializer.save()
+                UserGroup.objects.create(user=request.user.instance, group=serializer.instance, status='admin')
+                
+                return Response({'msg': 'Group created successfully', 'group': serializer.data}, status=status.HTTP_201_CREATED)
+                            
+            return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            print(e)
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+    def put(self, request):
+        try:
+            
+            if not request.user:
+                return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            begin=time.time()
+            try:
+                groupUser=UserGroup.objects.select_related('group').get(user=request.user['id'], group__id=request.data['groupId'], status__in=['admin', 'member'],group__is_deleted=False)
+            except Exception as e:
+                print(e)
+                return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+            if groupUser.status=='member':
+                end=time.time()
+                print(end-begin)
+                return Response({'error': 'You are not authorized to edit this group'}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            if groupUser.status=='admin':
+                data={
+                    'groupName': request.data['groupName'],
+                    'groupDescription': request.data['groupDescription'],
+                    'groupPicture': request.data['groupPicture'] if 'groupPicture' in request.data else None,
+                }
+
+                if groupUser.group.createdBy==request.user.instance:
+                    data['groupPassword']=request.data['groupPassword']
+                
+                
+                serializer=GroupSerializer(groupUser.group, data=data, context={'request': request}, partial=True)
+                if serializer.is_valid():
+                    serializer.save()
+                    
+                    end=time.time()
+                    print(end-begin)
+                    return Response({'msg': 'Group updated successfully', 'group': serializer.data}, status=status.HTTP_200_OK)
+                
+                end=time.time()
+                print(end-begin)
+                return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+            
+                
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+    def delete(self, request):
+        try:
+            if not request.user:
+                return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+            try:
+                group=Group.objects.get(id=request.data['groupId'])
+            except:
+                return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+            if group.createdBy!=request.user.instance:
+                return Response({'error': 'You are not authorized to delete this group'}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            group.soft_delete()
+            return Response({'msg': 'Group deleted successfully'}, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+@api_view(['POST'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def joinGroup(request):
+    try:
+        if not request.user:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            # group=Group.objects.get(is_deleted=False, groupHash=request.data['groupHash'])
+            group=Group.objects.get(is_deleted=False, id=request.data['groupId'])
+        except:
+            return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        begin=time.time()
+        try:
+            groupUser=group.usergroup_set.get(user=request.user.instance)
+            print(time.time()-begin)
+            
+            # begin=time.time()
+            # groupUser=UserGroup.objects.select_related('group').get(user=request.user["id"], group__id=request.data['groupId'], group__is_deleted=False)
+            # print(time.time()-begin)
+            if groupUser.status=='member' or groupUser.status=='admin':
+                return Response({'error': 'You are already a member of this group'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            
+            return Response({'error': 'You have to be invited to join this group'}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            
+        except :
+            if not check_password(request.data['groupPassword'], group.groupPassword):
+                return Response({'error': 'Invalid password'}, status=status.HTTP_401_UNAUTHORIZED) 
+            
+            #? Which one is better? 2nd one is faster by few milliseconds
+            # UserGroup.objects.create(user=request.user.instance, group=group, status='member')
+            group.usergroup_set.create(user=request.user.instance, status='member')
+            print(time.time()-begin)
+            return Response({'msg': 'You have joined the group successfully'}, status=status.HTTP_200_OK)
+            
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['PATCH'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def leaveGroup(request):
+    try:
+        if not request.user:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            groupUser=UserGroup.objects.select_related('group').get(user=request.user["id"], group__id=request.data['groupId'], group__is_deleted=False, status__in=['admin', 'member'])
+        except:
+            return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if groupUser.group.createdBy==request.user.instance:
+            return Response({'error': 'You cannot leave the group as you are the creator'}, status=status.HTTP_401_UNAUTHORIZED)
+            
+        groupUser.status='left'
+        groupUser.save()
+        return Response({'msg': 'You have left the group successfully'}, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PUT'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def updateGroupUserStatus(request):
+    try:
+        
+        begin=time.time()
+        if not request.user:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if request.data['userId']==str(request.user["id"]):
+            return Response({'error': 'You cannot update your own status'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        if request.data['status']!='admin' and request.data['status']!='member' and request.data['status']!='kicked':
+            return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            groupUser=UserGroup.objects.select_related('group').get(user=request.user["id"], group__id=request.data['groupId'], group__is_deleted=False, status__in=['admin', 'member'])
+        except:
+            return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+        if groupUser.status!='admin':
+            return Response({'error': 'You are not authorized to update the status of this user'}, status=status.HTTP_401_UNAUTHORIZED)
+            
+        try:
+            groupUser2=UserGroup.objects.select_related('group').get(user=request.data['userId'], group__id=request.data['groupId'], group__is_deleted=False, status__in=['admin', 'member'])
+        except:
+            return Response({'error': 'User not found in group'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if groupUser2.user==groupUser.group.createdBy:
+            print(time.time()-begin)
+            return Response({'error': 'You cannot update the status of the creator'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        
+        # if groupUser2.status=='admin':  #? check if this is needed
+        #     return Response({'error': 'You cannot update the status of another admin'}, status=status.HTTP_401_UNAUTHORIZED)
+         
+        groupUser2.status=request.data['status']
+        groupUser2.save()
+        
+        print(time.time()-begin)
+         
+        return Response({'msg': 'Status updated successfully'}, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+@api_view(['GET'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def getGroupUsers(request, groupId):
+    try:
+        if not request.user:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        begin=time.time()
+        try:
+            groupUser=UserGroup.objects.select_related('group').get(user=request.user["id"], group__id=groupId, group__is_deleted=False, status__in=['admin', 'member'])
+        except:
+            return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+       
+        users=groupUser.group.usergroup_set.select_related('user').filter(~Q(user__id=request.user["id"]),status__in=['admin', 'member'],).values('user__id', 'user__username',  'user__profilePicture', 'status')
+        
+        print(time.time()-begin)
+        return Response({'users': users}, status=status.HTTP_200_OK)
+    
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

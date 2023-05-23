@@ -144,3 +144,27 @@ class UserFriendSerializer(serializers.ModelSerializer):
         return instance
     
     
+class GroupSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(read_only=True)
+    groupHash= serializers.UUIDField(read_only=True)
+    groupName = serializers.CharField(max_length=100)
+    groupDescription = serializers.CharField(allow_blank=True, allow_null=True)
+    groupPicture = serializers.ImageField(required=False, allow_null=True, allow_empty_file=True)
+    groupPassword = serializers.CharField(max_length=128, write_only=True)
+    createdBy = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
+    class Meta:
+        model = Group
+        fields = '__all__'
+        
+    def create(self, validated_data):
+        validated_data['groupPassword'] = make_password(validated_data['groupPassword'])
+        group = Group.objects.create(**validated_data)
+        return group
+    
+    def update(self, instance, validated_data):
+        instance.groupName=validated_data.get('groupName',instance.groupName)
+        instance.groupPicture=validated_data.get('groupPicture',instance.groupPicture)
+        instance.groupPassword=make_password(validated_data.get('groupPassword',instance.groupPassword))
+        instance.groupDescription=validated_data.get('groupDescription',instance.groupDescription)
+        instance.save()
+        return instance

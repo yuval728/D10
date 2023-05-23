@@ -1,13 +1,15 @@
 from django.db import models
 from django_extensions.db.models import TimeStampedModel
 from django.utils import timezone
+import uuid
+from .metaModels import *
 # Create your models here.
 
 def user_directory_path(instance, filename):
     # file will be uploaded to MEDIA_ROOT/user_<id>/<filename>
     # print(instance.id)
     # print(instance)
-    return 'userData/{0}/profilePictures/{1}'.format(instance, filename)
+    return 'static/userData/{0}/profilePictures/{1}'.format(instance, filename)
 class User(TimeStampedModel):
     id=models.AutoField(primary_key=True)
     username=models.CharField(max_length=100,blank=True)
@@ -69,7 +71,7 @@ class UserOldPassword(TimeStampedModel):
     user=models.ForeignKey(User,on_delete=models.CASCADE)
     
     def __str__(self):
-        return self.user.username+" "+self.password
+        return " ".join([self.user.username,self.password])
     
 
 # ? Learn more about device token
@@ -100,24 +102,28 @@ class UserFriendRequest(TimeStampedModel):
     status=models.CharField(max_length=100,default='pending')
     # by=models.CharField(max_length=100,default='user1')
     def __str__(self):
-        return self.user1.username+" "+self.user2.username+" "+self.status
+        return " ".join([self.user1.username,self.user2.username,self.status])
 
 
-def group_directory_path(instance, filename):
-    return 'groupData/{0}/groupPictures/{1}'.format(instance.id, filename)
+def group_directory_path(instance, filename): # ? Keep group picture static ?
+    print(instance)
+    return 'static/groupData/{0}/groupPictures/{1}'.format(instance, filename)
     
-class Group(TimeStampedModel):
+class Group(SoftDeleteModel):
     id=models.AutoField(primary_key=True)
+    groupHash=models.UUIDField(default=uuid.uuid4,editable=False,unique=True )
     groupName=models.CharField(max_length=100)
+    groupDescription=models.TextField(blank=True,null=True)
     groupPassword=models.CharField(max_length=100)
     groupPicture=models.ImageField(upload_to=group_directory_path,blank=True)
     createdBy=models.ForeignKey(User,on_delete=models.CASCADE,related_name='groupCreator')
+    
     
     def __uuid__(self):
         return self.id
     
     def __str__(self):
-        return self.groupName
+        return " ".join([self.groupName,str(self.groupHash),str(self.id)])
 
 class UserGroup(TimeStampedModel):
     id=models.AutoField(primary_key=True)
@@ -126,7 +132,7 @@ class UserGroup(TimeStampedModel):
     status=models.CharField(max_length=100,default='member')
     
     def __str__(self):
-        return self.user.username+" "+self.group.groupName+" "+self.status
+        return " ".join([self.user.username,self.group.groupName,self.status])
 
 # ? Try with UserFriend Model rather than using user1 and user2
 class UserChat(TimeStampedModel):

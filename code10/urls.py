@@ -22,4 +22,9 @@ urlpatterns = [
     path ('getFriends/', views.getFriendList, name='getFriends'),
     path('updateFriendShip/', views.updateFriendStatus, name='updateFriendShip'),
     path('getFriendToken/', views.getFriendToken, name='getFriendToken'),
+    path('groups/',views.GroupViews.as_view(), name='groups'),
+    path('joinGroup/', views.joinGroup, name='joinGroup'),
+    path('leaveGroup/', views.leaveGroup, name='leaveGroup'),
+    path('updateGroupUser/', views.updateGroupUserStatus, name='updateGroupUserStatus'),
+    path('getGroupUsers/<int:groupId>/', views.getGroupUsers, name='getGroupUsers'),
 ]
