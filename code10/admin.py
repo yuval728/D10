@@ -16,6 +16,7 @@ admin.site.register(UserGroup)
 admin.site.register(GroupChat)
 admin.site.register(GroupChatFile)
 admin.site.register(GroupChatStatus)
+admin.site.register(GroupInviteSlug)
 
 
 

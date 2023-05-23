@@ -199,5 +199,12 @@ class GroupChatStatus(TimeStampedModel):
     status=models.CharField(max_length=100,default='unread')
     
     def __str__(self):
-        return self.groupChat.id+" "+self.user.username+" "+self.status
+        return " ".join([self.groupChat.id,self.user.username,self.status])
 
+class GroupInviteSlug(TimeStampedModel):
+    id=models.AutoField(primary_key=True)
+    group=models.OneToOneField(Group,on_delete=models.CASCADE)
+    slug=models.SlugField(max_length=250,unique=True)
+    expiry=models.DateTimeField()
+    def __str__(self):
+        return " ".join([self.group.groupName,self.slug])

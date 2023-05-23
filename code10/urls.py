@@ -27,4 +27,6 @@ urlpatterns = [
     path('leaveGroup/', views.leaveGroup, name='leaveGroup'),
     path('updateGroupUser/', views.updateGroupUserStatus, name='updateGroupUserStatus'),
     path('getGroupUsers/<int:groupId>/', views.getGroupUsers, name='getGroupUsers'),
+    path('sendGroupInvite/', views.createGroupInviteLink, name='sendGroupInvite'),
+    path('joinGroup/<str:slug>/', views.joinGroupViaInviteLink, name='joinGroupByInviteLink'),
 ]

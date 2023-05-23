@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from django.db.models import Q
+from django.utils.text import slugify
 # from django.core.mail import send_mail
 
 from .authentication import CustomAuthentication, IsAuthenticatedAndVerified, P2PAuthentication
@@ -19,7 +20,7 @@ from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 
 from .utils.otp_generate import generateOTP
-import time
+import time, random
 
 # from django.views.decorators.csrf import csrf_exempt
 
@@ -800,6 +801,72 @@ def getGroupUsers(request, groupId):
         
         print(time.time()-begin)
         return Response({'users': users}, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['POST'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def createGroupInviteLink(request):
+    try:
+        if not request.user:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        begin=time.time()
+        try:
+            groupUser=UserGroup.objects.select_related('group').get(user=request.user["id"], group__id=request.data['groupId'], group__is_deleted=False, status__in=['admin', 'member'])
+        except:
+            return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if groupUser.status!='admin':
+            return Response({'error': 'You are not authorized to create invite links for this group'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        slug=slugify(groupUser.group.groupName+str(timezone.now())+str(random.randint(0, 1000000)))
+        expiry=timezone.now()+timezone.timedelta(hours=1)
+        try:
+            inviteLink=GroupInviteSlug.objects.get(group__id=request.data['groupId'])
+            inviteLink.slug=slug
+            inviteLink.expiry=expiry
+            inviteLink.save()
+        except:
+            inviteLink=GroupInviteSlug.objects.create(group=groupUser.group, slug=slug, expiry=expiry)
+
+        
+        print(time.time()-begin)
+        return Response({'msg': 'Invite link created successfully', 'inviteLink': inviteLink.slug}, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['GET'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def joinGroupViaInviteLink(request, slug):
+    try:
+        if not request.user:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        begin=time.time()
+        try:
+            inviteLink=GroupInviteSlug.objects.select_related('group').get(slug=slug, expiry__gte=timezone.now())
+        except:
+            return Response({'error': 'Invite link not found or expired'}, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            groupUser=UserGroup.objects.get(user=request.user["id"], group__id=inviteLink.group.id, group__is_deleted=False)
+            
+            if groupUser.status=='admin' or groupUser.status=='member':
+                return Response({'error': 'You are already a member of this group'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            groupUser.status='member'
+            groupUser.save()
+            
+        except:
+            groupUser=UserGroup.objects.create(user=request.user.instance, group=inviteLink.group, status='member')
+        
+        print(time.time()-begin)
+        return Response({'msg': 'You have joined the group successfully'}, status=status.HTTP_200_OK)
     
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
