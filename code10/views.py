@@ -759,7 +759,7 @@ def updateGroupUserStatus(request):
             return Response({'error': 'You are not authorized to update the status of this user'}, status=status.HTTP_401_UNAUTHORIZED)
             
         try:
-            groupUser2=UserGroup.objects.select_related('group').get(user=request.data['userId'], group__id=request.data['groupId'], group__is_deleted=False, status__in=['admin', 'member'])
+            groupUser2=UserGroup.objects.select_related('group','user').get(user=request.data['userId'], group__id=request.data['groupId'], group__is_deleted=False, status__in=['admin', 'member'])
         except:
             return Response({'error': 'User not found in group'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -870,3 +870,28 @@ def joinGroupViaInviteLink(request, slug):
     
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@authentication_classes([CustomAuthentication])
+@permission_classes([IsAuthenticatedAndVerified])
+def getGroupToken(request,groupId):
+    try:
+        if not request.user:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        begin=time.time()
+        try:
+            groupUser=UserGroup.objects.select_related('group').get(user=request.user["id"], group__id=groupId, group__is_deleted=False, status__in=['admin', 'member'])
+        except:
+            return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        token=TokenObtainSerializerP2G.get_token(request.user.instance, groupUser.id)
+        
+        end=time.time()
+        print(end-begin)
+        return Response({'token': str(token.access_token)}, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    

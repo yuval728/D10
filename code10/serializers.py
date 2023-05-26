@@ -25,12 +25,24 @@ class TokenObtainSerializerP2P(TokenObtainPairSerializer):
         
         token = super(TokenObtainSerializerP2P, cls).get_token(user)
         # Add custom claims
+        token['chat_type']= 'P2P'
         token['friend_id']= friend.id
         if user.id == friend.user1.id:
             token['friend_userId']= friend.user2.id
         else:
             token['friend_userId']= friend.user1.id
-            
+        # ...
+        # print(token)
+        return token
+    
+class TokenObtainSerializerP2G(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls,user, groupUser):
+        
+        token = super(TokenObtainSerializerP2G, cls).get_token(user)
+        # Add custom claims
+        token['groupUser_id']= groupUser
+        token['chat_type']= 'P2G'
         # ...
         
         return token

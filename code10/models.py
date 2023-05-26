@@ -133,6 +133,9 @@ class UserGroup(TimeStampedModel):
     
     def __str__(self):
         return " ".join([self.user.username,self.group.groupName,self.status])
+    
+    def getStatus(self):
+        return self.status
 
 # ? Try with UserFriend Model rather than using user1 and user2
 class UserChat(TimeStampedModel):
@@ -196,10 +199,10 @@ class GroupChatStatus(TimeStampedModel):
     id=models.AutoField(primary_key=True)
     groupChat=models.ForeignKey(GroupChat,on_delete=models.CASCADE)
     user=models.ForeignKey(User,on_delete=models.CASCADE,related_name='groupChatUser')
-    status=models.CharField(max_length=100,default='unread')
+    status=models.SmallIntegerField(default=0)
     
     def __str__(self):
-        return " ".join([self.groupChat.id,self.user.username,self.status])
+        return " ".join([str(self.groupChat.id),self.user.username,str(self.status)])
 
 class GroupInviteSlug(TimeStampedModel):
     id=models.AutoField(primary_key=True)
