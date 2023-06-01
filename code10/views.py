@@ -11,6 +11,9 @@ from django.utils.text import slugify
 from .authentication import CustomAuthentication, IsAuthenticatedAndVerified, P2PAuthentication
 from rest_framework.authtoken.models import Token
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+
 from .models import *
 from .serializers import *
 
@@ -20,7 +23,7 @@ from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 
 from .utils.otp_generate import generateOTP
-import time, random
+import time, random, os
 
 # from django.views.decorators.csrf import csrf_exempt
 
@@ -482,7 +485,7 @@ def updateFriendStatus(request):
                 if  resStatus!='blocked' and resStatus!='removed':
                     return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
                 
-                friend=UserFriend.objects.get(id=request.data['id'])
+                friend=UserFriend.objects.select_related('user1', 'user2').get(id=request.data['id'])
                 if friend.user1.id!=request.user['id'] and friend.user2.id!=request.user['id']:
                     return Response({'error': 'Friend not found'}, status=status.HTTP_404_NOT_FOUND)
                 
@@ -499,6 +502,28 @@ def updateFriendStatus(request):
                     friend.status=resStatus
                     friend.by=request.user['id']
                     friend.save()
+                    
+                        
+                    channel_layer = get_channel_layer()
+                    
+                    async_to_sync(channel_layer.group_send)(
+                        str(friend.id),
+                        {
+                        'type': 'chat_message',
+                        'id': friend.id,
+                        'status': resStatus,
+                        'by': request.user['id']
+                        }
+                    )
+
+                    async_to_sync(channel_layer.group_send)(
+                        str(friend.id),
+                        {
+                            'type': 'websocket.close',
+                            'code': 1000,
+                        }
+                    )  
+                        
                     return Response({'msg': f'Friend has been {resStatus}'}, status=status.HTTP_200_OK)
             
             except:
@@ -540,22 +565,7 @@ def getFriendToken(request): #? Change this to request, friendId
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-@api_view(['GET'])
-@authentication_classes([P2PAuthentication])
-@permission_classes([])
-def testGet(request):
-    try:
-        begin=time.time()
-        if request.user:
-            user1=UserSerializer(request.user['user']).data
-            user2=UserSerializer(request.user['friend_user']).data
-            friend=UserFriendSerializer(request.user['friend']).data
-            end=time.time()
-            print(end-begin)
-            return Response({'user1': user1, 'user2': user2, 'friend': friend}, status=status.HTTP_200_OK)
-        return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     
 class GroupViews(APIView):
     authentication_classes=[CustomAuthentication]
@@ -895,3 +905,83 @@ def getGroupToken(request,groupId):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
+
+@api_view(['GET'])
+@authentication_classes([P2PAuthentication])
+@permission_classes([])
+def testGet(request):
+    try:
+        begin=time.time()
+        if request.user:
+            user1=UserSerializer(request.user['user']).data
+            user2=UserSerializer(request.user['friend_user']).data
+            friend=UserFriendSerializer(request.user['friend']).data
+            end=time.time()
+            print(end-begin)
+            return Response({'user1': user1, 'user2': user2, 'friend': friend}, status=status.HTTP_200_OK)
+        return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+@api_view(['POST'])
+@authentication_classes([P2PAuthentication])
+@permission_classes([])
+def sendMediaP2P(request):
+    try:
+        begin=time.time()
+        if not request.user:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if not request.FILES['media']:
+            return Response({'error': 'Media not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        file=request.FILES['media']
+        print(file.name, file.size, file.content_type)
+        
+        # if request.data['mediaType'] not in ['image', 'video', 'audio', 'document']:
+        #     return Response({'error': 'Invalid media type'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        
+        fileLocation='media/userChatFiles/'+str(request.user['friend'].id) +'/'+str(timezone.now().strftime("%Y%m%d%H%M%S"))+file.name
+        if not os.path.exists('media/userChatFiles/'+str(request.user['friend'].id)):
+            os.makedirs('media/userChatFiles/'+str(request.user['friend'].id))
+            
+        with open(fileLocation, 'wb+') as destination:
+            for chunk in file.chunks():
+                destination.write(chunk)
+        
+        print(time.time()-begin)
+        return Response({'msg': fileLocation}, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        
+@api_view(['GET'])
+@authentication_classes([P2PAuthentication])
+@permission_classes([])
+def getMediaP2P(request):
+    try:
+        begin=time.time()
+        if not request.user:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if not request.query_params or 'fileLocation' not in request.query_params:
+            return Response({'error': 'File location not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        fileLocation=request.query_params['fileLocation']
+        
+        if not fileLocation.startswith('media/userChatFiles/'+str(request.user['friend'].id)):
+            return Response({'error': 'File not found bitch'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if not os.path.exists(fileLocation):
+            return Response({'error': 'File not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        file=open(fileLocation, 'rb')
+        response=FileResponse(file)
+        print(time.time()-begin)
+        return response
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

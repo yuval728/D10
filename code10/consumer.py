@@ -23,51 +23,90 @@ class P2PChatConsumer(WebsocketConsumer):
             self.friend= self.scope['friend']
             self.friend_user= self.scope['friend_user']
         except:
-            return
+            return  self.close()
     
         
-        if self.friendOnline[self.friend.id][self.user.id]:
+        if  self.friendOnline[self.friend.id][self.user.id]:
             print("already connected")
             return 
+        
         self.accept()
         
+        try:
+            friendChannel= FriendChannel.objects.get(user=self.user, friend=self.friend)
+            friendChannel.setChannel(self.channel_name)
+        except FriendChannel.DoesNotExist:
+            friendChannel= FriendChannel.objects.create(user=self.user, friend=self.friend, channel=self.channel_name)
 
         async_to_sync(self.channel_layer.group_add)(
             str(self.friend.id),
             self.channel_name
         )
+        # print(self.channel_name)
         
         self.friendOnline[self.friend.id][self.user.id]= True
-        print(self.friendOnline)
+        # print(self.friendOnline)
     
     def disconnect(self, close_code):
         # Leave room group
+        print("disconnecting", close_code)
         if not self.user or not self.friend or not self.friend_user:
-            print(  "not connected")
-            return
+            # print(  "not connected")
+            return self.close()
         
-        else:
+        elif close_code == 1000:
             async_to_sync(self.channel_layer.group_discard)(
                 str(self.friend.id),
                 self.channel_name
             )
+            FriendChannel.objects.get(user=self.user, friend=self.friend).delete()
             
             self.friendOnline[self.friend.id][self.user.id]= False
+        
+            
     
-    def receive(self, text_data):
+    def receive(self, text_data ):
     
         if not self.user or not self.friend or not self.friend_user:
-            return
+            return self.close()
         
         text_data_json = json.loads(text_data)
-        message = text_data_json['message']
+        message = text_data_json['message'] if 'message' in text_data_json else None
+        msg_type= text_data_json['type'] if 'type' in text_data_json else None
          
+         
+        if msg_type == 'typing':
+            async_to_sync(self.channel_layer.group_send)(
+                str(self.friend.id),
+                {
+                    'type': 'chat_message',
+                    # 'message': 'typing',
+                    'user1': self.user.id,
+                    'friend': self.friend.id,
+                    # 'user2': self.friend_user.id,
+                    'msg_type': msg_type,
+                }
+            )
+            return
+        
+        # * It is not executed
+        if msg_type == 'friendStatus':
+            print("friendStatus")
+            return
+        
         status='unread'
         if self.friendOnline[self.friend.id][self.friend_user.id]:
             status='read'
-            
         # TODO: change status of the message
         userChat= UserChat.objects.create( user1=self.user, user2=self.friend_user, friend=self.friend, message=message, status=status)
+        
+        
+        file= None
+        if 'file' in text_data_json:
+            file= text_data_json['file']
+            if file.split('/')[2] == str(self.friend.id):
+                userChatFile= UserChatFile.objects.create(chat=userChat, file=file, fileType=text_data_json['fileType'])
+                
 
         async_to_sync(self.channel_layer.group_send)(
             str(self.friend.id),
@@ -78,6 +117,7 @@ class P2PChatConsumer(WebsocketConsumer):
                 'friend': self.friend.id,
                 'user2': self.friend_user.id,
                 'status': status,
+                'file': file,
             }
         )
         
@@ -87,7 +127,10 @@ class P2PChatConsumer(WebsocketConsumer):
         # Send message to WebSocket
         self.send(text_data=json.dumps(event))
         
+    def websocket_close(self, event):
+        self.send(text_data=json.dumps(event), close=True)
 
+# ############################################################################################################
 class P2GChatConsumer(WebsocketConsumer):
     groupMembers= defaultdict(lambda: defaultdict(lambda: False))
     
@@ -105,7 +148,8 @@ class P2GChatConsumer(WebsocketConsumer):
             self.group= self.scope['group']
             self.groupUser= self.scope['groupUser']
         except:
-            return
+            return self.close()
+        # self.send(text_data=json.dumps({'message': "user or group or groupUser not found"}))
         
 
         if self.groupMembers[self.group.id][self.user.id]:
@@ -127,7 +171,7 @@ class P2GChatConsumer(WebsocketConsumer):
         if not self.user or not self.group or not self.groupUser:
             # message= "user or group or groupUser not found"
             # self.send(text_data=json.dumps({'message': message}))
-            return
+            return 
         
         else:
             async_to_sync(self.channel_layer.group_discard)(
@@ -140,17 +184,23 @@ class P2GChatConsumer(WebsocketConsumer):
         
     def receive(self, text_data):
         
-        
         if not self.user or not self.group or not self.groupUser:
-            return
+            return self.close()
+        # self.send(text_data=json.dumps({'message': "user or group or groupUser not found"}))
+        
+        
         text_data_json = json.loads(text_data)
         message = text_data_json['message']
         
-        groupChat= GroupChat.objects.create( user=self.user, group=self.group, message=message)
+        groupusers=UserGroup.objects.select_related('user').filter(group=self.group, status__in=['member', 'admin'])
+        # .exclude(user=self.user)
         
-        groupusers=UserGroup.objects.select_related('user').filter(group=self.group, status__in=['member', 'admin']).exclude(user=self.user)
-        # print(groupusers)
-        print(self.groupUser.getStatus())
+        if self.groupUser not in groupusers:
+            self.send(text_data=json.dumps({'message': "user not found in group"}))
+            return self.close()
+        
+        groupChat= GroupChat.objects.create( user=self.user, group=self.group, message=message)
+
         
         groupChatStatus=list()
         for  groupuser in groupusers:

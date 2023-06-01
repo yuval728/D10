@@ -56,7 +56,7 @@ class P2PAuthentication(BaseAuthentication):
             #     raise exceptions.AuthenticationFailed('User not found')
             
             try:
-                friend=UserFriend.objects.select_related('user1', 'user2').get(id=valid_data['friend_id'])
+                friend=UserFriend.objects.select_related('user1', 'user2').get(id=valid_data['friend_id'], status='friends')
                 
             except UserFriend.DoesNotExist:
                 raise exceptions.AuthenticationFailed('Friend not found')

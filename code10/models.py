@@ -155,7 +155,8 @@ class UserChat(TimeStampedModel):
 
 def userChatFile_directory_path(instance, filename):
     # TODO filename will be year/month/day/time-filename
-    return 'userChatFiles/{0}/{1}'.format(instance.id, filename)
+    return 'media/userChatFiles/{0}/{1}'.format(instance, filename)
+    # return 'userChatFiles/{0}/{1}'.format(instance.id, filename)
 class UserChatFile(TimeStampedModel):
     id=models.AutoField(primary_key=True)
     chat=models.OneToOneField(UserChat,on_delete=models.CASCADE)
@@ -166,7 +167,8 @@ class UserChatFile(TimeStampedModel):
         return self.id 
     
     def __str__(self):
-        return self.chat.id
+        # return " ".join([str(self.chat.friend.id)])
+        return str(self.chat.friend.id)
     
         
 class GroupChat(TimeStampedModel):
@@ -211,3 +213,28 @@ class GroupInviteSlug(TimeStampedModel):
     expiry=models.DateTimeField()
     def __str__(self):
         return " ".join([self.group.groupName,self.slug])
+    
+    
+class FriendChannel(TimeStampedModel):
+    id=models.AutoField(primary_key=True)
+    user=models.ForeignKey(User,on_delete=models.CASCADE,related_name='friendChannelUser')
+    friend=models.ForeignKey(UserFriend,on_delete=models.CASCADE,related_name='friendChannelFriend')
+    channel=models.CharField(max_length=100)
+    def __str__(self):
+        return " ".join([self.user.username,self.friend.user1.username,self.channel])
+    
+    def setChannel(self,channel=''):
+        self.channel=channel
+        self.save()
+    
+class GroupChannel(TimeStampedModel):
+    id=models.AutoField(primary_key=True)
+    user=models.ForeignKey(User,on_delete=models.CASCADE,related_name='groupChannelUser')
+    group=models.ForeignKey(Group,on_delete=models.CASCADE,related_name='groupChannelGroup')
+    channel=models.CharField(max_length=100)
+    def __str__(self):
+        return " ".join([self.user.username,self.group.groupName,self.channel])
+    
+    def setChannel(self,channel=''):
+        self.channel=channel
+        self.save()

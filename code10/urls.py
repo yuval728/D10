@@ -12,6 +12,7 @@ urlpatterns = [
     path('forgotPassword/', views.forgotPassword, name='forgotPassword'),
     path('resetPassword/', views.resetPassword, name='resetPassword'),
     path('getUsers/', views.getUserList, name='getUsers'),
+    
     path('sendFriendRequest/', views.sendFriendRequest, name='sendFriendRequest'),
     path('cancelFriendRequest/', views.cancelFriendRequest, name='cancelFriendRequest'),
     path('respondToFriendRequest/', views.respondFriendRequest, name='respondToFriendRequest'),
@@ -22,6 +23,7 @@ urlpatterns = [
     path ('getFriends/', views.getFriendList, name='getFriends'),
     path('updateFriendShip/', views.updateFriendStatus, name='updateFriendShip'),
     path('getFriendToken/', views.getFriendToken, name='getFriendToken'),
+    
     path('groups/',views.GroupViews.as_view(), name='groups'),
     path('joinGroup/', views.joinGroup, name='joinGroup'),
     path('leaveGroup/', views.leaveGroup, name='leaveGroup'),
@@ -30,4 +32,8 @@ urlpatterns = [
     path('sendGroupInvite/', views.createGroupInviteLink, name='sendGroupInvite'),
     path('joinGroup/<str:slug>/', views.joinGroupViaInviteLink, name='joinGroupByInviteLink'),
     path('getGroupToken/<int:groupId>/', views.getGroupToken, name='getGroupToken'),
+    
+    path('sendMediaP2P/', views.sendMediaP2P, name='sendMedia'),  
+    # path('sendMediaGroup/', views.sendMediaGroup, name='sendMediaGroup'),
+    path('getMediaP2P/', views.getMediaP2P, name='getMediaP2P'),
 ]

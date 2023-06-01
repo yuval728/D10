@@ -17,7 +17,8 @@ admin.site.register(GroupChat)
 admin.site.register(GroupChatFile)
 admin.site.register(GroupChatStatus)
 admin.site.register(GroupInviteSlug)
-
+admin.site.register(FriendChannel)
+admin.site.register(GroupChannel)
 
 
 

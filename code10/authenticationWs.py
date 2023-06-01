@@ -32,7 +32,7 @@ class ChatAuthMiddlewareInstance:
         try:
             token= headers[b'authorization'].decode().split(' ')[1]
             if not token:
-                return None
+                return await self.inner(scope, receive, send)
             tokenBackend= TokenBackend(algorithm='HS256')
             valid_data= tokenBackend.decode(token,verify=False)
             
