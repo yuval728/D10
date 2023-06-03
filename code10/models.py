@@ -122,6 +122,7 @@ class Group(SoftDeleteModel):
     def __uuid__(self):
         return self.id
     
+    # * self.id always returns None when creating
     def __str__(self):
         return " ".join([self.groupName,str(self.groupHash),str(self.id)])
 

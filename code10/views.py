@@ -738,6 +738,9 @@ def leaveGroup(request):
             
         groupUser.status='left'
         groupUser.save()
+        
+        disconnectGroupUser(request.user["id"], request.data['groupId'], 'left')
+        
         return Response({'msg': 'You have left the group successfully'}, status=status.HTTP_200_OK)
     
     except Exception as e:
@@ -784,6 +787,10 @@ def updateGroupUserStatus(request):
         groupUser2.status=request.data['status']
         groupUser2.save()
         
+        
+        if request.data['status']=='kicked':
+            disconnectGroupUser(request.data["userId"], request.data['groupId'], request.data['status'])
+        
         print(time.time()-begin)
          
         return Response({'msg': 'Status updated successfully'}, status=status.HTTP_200_OK)
@@ -791,6 +798,40 @@ def updateGroupUserStatus(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
+
+def disconnectGroupUser(user, group, status):
+    try:
+        channel_layer=get_channel_layer()
+        
+        async_to_sync(channel_layer.group_send)(
+            group,
+            {
+                'type': 'chat_message',
+                'status': status,
+                'user': user,
+                'group': group,
+                'msg_type': 'status',
+            }
+        )
+        # ? need to save the message ?
+        try:
+            groupChannel= GroupChannel.objects.get(group=group,user=user)
+            
+            async_to_sync(channel_layer.send)(
+                groupChannel.channel,
+                {
+                    'type': 'websocket.close',
+                    'code': 1000,
+                }
+            )
+        except:
+            pass
+    
+    except Exception as e:
+        print(e)
+        pass
+
+
 
 @api_view(['GET'])
 @authentication_classes([CustomAuthentication])
