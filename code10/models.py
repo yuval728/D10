@@ -23,7 +23,7 @@ class User(TimeStampedModel):
         return self.id
     
     def __str__(self):
-        return str(self.id)
+        return self.email
     
     def setVerified(self):
         self.verified=True
@@ -40,17 +40,15 @@ class UserStatus(TimeStampedModel):
     def __str__(self):
         return self.user.username+" "+str(self.status)
     
-    def setStatus(self, status):
+    def setStatus(self, status, lastLogin=None):
         self.status=status
+        self.lastLogin=lastLogin
         self.save()
     
     def setShow(self):
         self.show=not self.show
         self.save()
         
-    def setLastLogin(self):
-        self.lastLogin=timezone.now()
-        self.save()
 
 class UserOTP(TimeStampedModel):
     id=models.AutoField(primary_key=True)

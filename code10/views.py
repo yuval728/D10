@@ -8,7 +8,7 @@ from django.db.models import Q
 from django.utils.text import slugify
 # from django.core.mail import send_mail
 
-from .authentication import CustomAuthentication, IsAuthenticatedAndVerified, P2PAuthentication
+from .authentication import  IsAuthenticatedAndVerified, P2PAuthentication, Authentication
 from rest_framework.authtoken.models import Token
 
 from asgiref.sync import async_to_sync
@@ -25,7 +25,6 @@ from rest_framework.decorators import api_view, permission_classes, authenticati
 from .utils.otp_generate import generateOTP
 import time, random, os
 
-# from django.views.decorators.csrf import csrf_exempt
 
 
 # Create your views here.
@@ -94,6 +93,7 @@ def register(request):
 @permission_classes([permissions.AllowAny])
 def login(request):
     try:
+        begin=time.time()
         try:
             user= User.objects.get(username=request.data['username'])
         except Exception as e:
@@ -104,9 +104,10 @@ def login(request):
             token= TokenObtainPairSerializerAuth.get_token(user)
             
             userStatus= UserStatus.objects.get(user=serializer.data['id'])
-            userStatus.setStatus(True)
+            userStatus.setStatus(True,None)
             userStatus= UserStatusSerializer(userStatus)
             
+            print(time.time()-begin)
             return Response({'user': serializer.data, 'access': str(token.access_token), 'refresh': str(token), 'status': userStatus.data}, status=status.HTTP_200_OK)
         else:
             return Response({'error': 'Invalid Credentials'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -116,13 +117,14 @@ def login(request):
 
 
 class UserProfile(APIView):
-    authentication_classes = [CustomAuthentication]
+    authentication_classes = [Authentication]
     permission_classes= [permissions.IsAuthenticated]
     
     def get(self, request):
         try:
             if request.user:
-                return Response(request.user, status=status.HTTP_200_OK)
+                user=UserSerializer(request.user).data
+                return Response(user, status=status.HTTP_200_OK)
             
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
@@ -137,7 +139,7 @@ class UserProfile(APIView):
                     return Response({'error': 'Unauthorised verification'}, status=status.HTTP_401_UNAUTHORIZED)
                 
                 # ? TODO: update email, phone, username
-                user= request.user.instance
+                user= request.user
                 serializer = UserSerializer(user, data=request.data, context={'request': request} )
                 if serializer.is_valid():
                     serializer.save()
@@ -158,8 +160,7 @@ class UserProfile(APIView):
                 if 'verified' in request.data:
                     return Response({'error': 'Unauthorised verification'}, status=status.HTTP_401_UNAUTHORIZED)
                
-                # user= User.objects.get(id=request.user['id'])
-                user= request.user.instance
+                user= request.user
                 serializer = UserSerializer(user, data=request.data, context={'request': request}, partial=True )
                 if serializer.is_valid():
                     serializer.save()
@@ -174,23 +175,23 @@ class UserProfile(APIView):
 
 
 @api_view(['POST'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([permissions.IsAuthenticated])
 def verfiyUserRequest(request):
     try:
         if request.user:
-            if request.user['verified']:
+            if request.user.verified:
                 return Response({'error': 'User is already verified'}, status=status.HTTP_400_BAD_REQUEST)
             
             otp, expiry= generateOTP()
             
             try:
-                userotp=UserOTP.objects.get(user=request.user['id'])
+                userotp=UserOTP.objects.get(user=request.user)
                 userotp.otp=otp
                 userotp.expiry=expiry
                 userotp.save()
             except:
-                UserOTP.objects.create(user=request.user.instance, otp=otp, expiry=expiry)
+                UserOTP.objects.create(user=request.user, otp=otp, expiry=expiry)
             # TODO: send email
             # sendEmail(request.user['email'], otp)
             
@@ -202,19 +203,18 @@ def verfiyUserRequest(request):
     
 
 @api_view(['PATCH'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([permissions.IsAuthenticated])
 def verifyUser(request):
     try:
         if request.user:
             begin=time.time()
-            if request.user['verified']:
+            if request.user.verified:
                 return Response({'error': 'User is already verified'}, status=status.HTTP_400_BAD_REQUEST)
             try:
-                checkOtp= UserOTP.objects.get(user=request.user['id'])
+                checkOtp= UserOTP.objects.get(user=request.user)
             except:
                 return Response({'error': 'OTP not found'}, status=status.HTTP_404_NOT_FOUND)
-            # checkOtp=get_object_or_404(UserOTP, user=request.user['id'])
             
             if checkOtp.expiry < timezone.now():
                 return Response({'error': 'OTP expired'}, status=status.HTTP_400_BAD_REQUEST)
@@ -222,7 +222,7 @@ def verifyUser(request):
                 return Response({'error': 'Invalid OTP'}, status=status.HTTP_400_BAD_REQUEST)
             checkOtp.setExpiry()
             
-            request.user.instance.setVerified()
+            request.user.setVerified()
             
             end=time.time()
             print('Time taken: ', end-begin)
@@ -235,7 +235,7 @@ def verifyUser(request):
     
 
 @api_view(['POST'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([permissions.IsAuthenticated])
 def forgotPassword(request):
     try:
@@ -243,25 +243,25 @@ def forgotPassword(request):
             otp, expiry= generateOTP()
             
             try:
-                userotp=UserOTP.objects.get(user=request.user['id'])
+                userotp=UserOTP.objects.get(user=request.user)
                 userotp.otp=otp
                 userotp.expiry=expiry
                 userotp.save()
             except:
-                UserOTP.objects.create(user=request.user.instance, otp=otp, expiry=expiry)
+                UserOTP.objects.create(user=request.user, otp=otp, expiry=expiry)
             return Response({'otp': otp,'msg':'OTP has been sent'}, status=status.HTTP_200_OK)    
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 @api_view(['PATCH'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([permissions.IsAuthenticated])
 def resetPassword(request):
     try:
         if request.user:
             try:
-                checkOtp= UserOTP.objects.get(user=request.user['id'])
+                checkOtp= UserOTP.objects.get(user=request.user)
             except:
                 return Response({'error': 'OTP not found'}, status=status.HTTP_404_NOT_FOUND)
             if checkOtp.expiry < timezone.now():
@@ -270,14 +270,18 @@ def resetPassword(request):
                 return Response({'error': 'Invalid OTP'}, status=status.HTTP_400_BAD_REQUEST)
             checkOtp.setExpiry()
             
-            useroldpassword=UserOldPassword.objects.filter(user=request.user['id'])
+
+            useroldpassword=UserOldPassword.objects.filter(user=request.user)
+            # * both have same time complexity
+            useroldpassword=request.user.useroldpassword_set.all()
+            
             for oldpassword in useroldpassword:
                 if check_password(request.data['password'], oldpassword.password):
                     return Response({'error': 'Password already used'}, status=status.HTTP_400_BAD_REQUEST)
             
             password=make_password(request.data['password'])
-            UserOldPassword.objects.create(user=request.user.instance, password=password)
-            userserialize=UserSerializer(request.user.instance, data={'password':password}, context={'request': request}, partial=True)
+            UserOldPassword.objects.create(user=request.user, password=password)
+            userserialize=UserSerializer(request.user, data={'password':password}, context={'request': request}, partial=True)
             if userserialize.is_valid():
                 userserialize.save()
                 return Response({'msg': 'Password reset successfully'}, status=status.HTTP_200_OK)
@@ -290,13 +294,12 @@ def resetPassword(request):
         
 
 @api_view(['POST'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def sendFriendRequest(request):
     try:
         if request.user:
-           
-            if str(request.user['id']) == request.data['friend']:  #? if friend is int or string
+            if str(request.user.id) == request.data['friend']:  #? if friend is int or string
                 return Response({'error': 'You cannot send friend request to yourself'}, status=status.HTTP_400_BAD_REQUEST)
             try:
                 friend= User.objects.get(id=request.data['friend'])
@@ -304,20 +307,22 @@ def sendFriendRequest(request):
                 return Response({'error': 'Friend not found'}, status=status.HTTP_404_NOT_FOUND)
             try:
                 
-                alreadyfriend=UserFriend.objects.filter( Q(user1=request.user['id'], user2=request.data['friend']) | Q(user1=request.data['friend'], user2=request.user['id']))
-                if alreadyfriend:
-                    
-                    if alreadyfriend[0].status=='accepted':
+                try:
+                    alreadyfriend=UserFriend.objects.get( Q(user1=request.user, user2=friend) | Q(user1=friend, user2=request.user))
+                        
+                    if alreadyfriend.status=='friends':
                         return Response({'error': 'You are already friends'}, status=status.HTTP_400_BAD_REQUEST)
                     
-                    if alreadyfriend[0].status=='blocked':
-                        if alreadyfriend[0].by==str(request.user['id']):
+                    if alreadyfriend.status=='blocked':
+                        if alreadyfriend.by==str(request.user.id):
                             return Response({'error': 'You have blocked this user'}, status=status.HTTP_400_BAD_REQUEST)
                         else:
                             return Response({'error': 'You are blocked by this user'}, status=status.HTTP_400_BAD_REQUEST)
-                    
+                except UserFriend.DoesNotExist:
+                    pass
                 
-                friendrequest=UserFriendRequest.objects.get(user1=request.user['id'], user2=request.data['friend'])
+                
+                friendrequest=UserFriendRequest.objects.get(user1=request.user, user2=friend)
                 if friendrequest.status=='accepted':
                     return Response({'error': 'You are already friends'}, status=status.HTTP_400_BAD_REQUEST)
                 elif friendrequest.status=='pending':
@@ -333,25 +338,23 @@ def sendFriendRequest(request):
                 elif friendrequest.status=='blocked':
                     return Response({'error': 'You have blocked this user'}, status=status.HTTP_400_BAD_REQUEST) #TODO: change message to you are blocked by this user
             except:
-                UserFriendRequest.objects.create(user1=request.user.instance, user2=friend, status='pending')
+                UserFriendRequest.objects.create(user1=request.user, user2=friend, status='pending')
                 return Response({'msg': 'Friend request sent'}, status=status.HTTP_200_OK)
     
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 @api_view(['PATCH'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def respondFriendRequest(request):
     try:
         if request.user:
-            mutable = request.data._mutable
-            request.data._mutable = True #? to make request.data mutable
+            # mutable = request.data._mutable
+            # request.data._mutable = True #? to make request.data mutable
             try:
-                
-                request.data['friend']=int(request.data['friend'])
-                
-                friendrequest=UserFriendRequest.objects.get(user2=request.user['id'], user1=request.data['friend'])
+                 #? check if same speed .select_related('user1','user2')
+                friendrequest=UserFriendRequest.objects.get(user2=request.user, user1=request.data['friend'])
             except:
                 return Response({'error': 'Friend request not found'}, status=status.HTTP_404_NOT_FOUND)
             #? do with id or friend and check type 
@@ -366,21 +369,22 @@ def respondFriendRequest(request):
             friendrequest.save()
             # Todo: test it again with blocked status
             if reqStatus=='accepted':
-                oldFriend=UserFriend.objects.filter( Q(user1=friendrequest.user1, user2=friendrequest.user2) | Q(user1=friendrequest.user2, user2=friendrequest.user1)) # * Filter to get
-                if oldFriend:
-                    if oldFriend[0].status=='accepted':
+                try:
+                    oldFriend=UserFriend.objects.get( Q(user1=friendrequest.user1, user2=friendrequest.user2) | Q(user1=friendrequest.user2, user2=friendrequest.user1)) #? check if same speed .select_related('user1','user2')
+                    
+                    if oldFriend.status=='friends':
                         return Response({'error': 'You are already friends'}, status=status.HTTP_400_BAD_REQUEST)
-                    if oldFriend[0].status=='blocked': 
-                        if oldFriend[0].by!=str(request.user['id']):
+                    if oldFriend.status=='blocked': 
+                        if oldFriend.by!=str(request.user.id):
                             return Response({'error': 'You are blocked by this user'}, status=status.HTTP_400_BAD_REQUEST)
                         
-                    oldFriend[0].status='friends'
-                    oldFriend[0].by=''
-                    oldFriend[0].save()
-                else:
+                    oldFriend.status='friends'
+                    oldFriend.by=''
+                    oldFriend.save()
+                except UserFriend.DoesNotExist:
                     UserFriend.objects.create(user1=friendrequest.user1, user2=friendrequest.user2, status='friend', by='')
             
-            request.data._mutable = mutable
+            # request.data._mutable = mutable
             
             return Response({'msg': f'Friend request {reqStatus}'}, status=status.HTTP_200_OK)
         
@@ -389,13 +393,13 @@ def respondFriendRequest(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 @api_view(['PATCH'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def cancelFriendRequest(request):
     try:
         if request.user:
             try:
-                friendrequest=UserFriendRequest.objects.get(user1=request.user['id'], user2=request.data['friend'])
+                friendrequest=UserFriendRequest.objects.get(user1=request.user, user2=request.data['friend'])
                 if friendrequest.status!='pending':
                     return Response({'error': 'Friend request not found'}, status=status.HTTP_404_NOT_FOUND)
                 
@@ -410,38 +414,40 @@ def cancelFriendRequest(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 @api_view(['GET'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def getFriendRequest(request):
     try:
         if request.user:
-            friendrequests=UserFriendRequest.objects.filter(user2=request.user['id'], status='pending').values('id', 'user1', 'user1__username', 'user1__profilePicture')
+            friendrequests=UserFriendRequest.objects.filter(user2=request.user, status='pending').values('id', 'user1', 'user1__username', 'user1__profilePicture')
             return Response({"friendrequests":friendrequests}, status=status.HTTP_200_OK)
     
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)   
   
 @api_view(['GET'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def sentFriendRequest(request):
     try:
         if request.user:
+            begin=time.time()
             # if request.query_params:
             #     try:
             #         friendrequest=UserFriendRequest.objects.get(id=request.query_params['id'], user1=request.user['id'])
             #         return Response({"friendrequest":friendrequest}, status=status.HTTP_200_OK)
             #     except:
             #         return Response({'error': 'Friend request not found'}, status=status.HTTP_404_NOT_FOUND)
-                
-            friendrequests=UserFriendRequest.objects.filter(user1=request.user['id'], status='pending').values('id', 'user2', 'user2__username', 'user2__profilePicture')
+            # ? same speed with .select_related('user1','user2')
+            friendrequests=UserFriendRequest.objects.filter(user1=request.user, status='pending').values('id', 'user2', 'user2__username', 'user2__profilePicture')
+            print(time.time()-begin)
             return Response({"friendrequests":friendrequests}, status=status.HTTP_200_OK)
     
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)  
     
 @api_view(['GET'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def getUserList(request):
     try:
@@ -459,23 +465,23 @@ def getUserList(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 @api_view(['GET'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def getFriendList(request):
     try:
         if request.user:
             if request.query_params and request.query_params['friend']:
                 query=request.query_params['friend']
-                friends=UserFriend.objects.filter(Q(user1=request.user['id']) | Q(user2=request.user['id']), Q(user1__username__icontains=query) | Q(user2__username__icontains=query)).values('id', 'user1', 'user1__username', 'user1__profilePicture', 'user2', 'user2__username', 'user2__profilePicture')
+                friends=UserFriend.objects.filter(Q(user1=request.user) | Q(user2=request.user), Q(user1__username__icontains=query) | Q(user2__username__icontains=query)).values('id', 'user1', 'user1__username', 'user1__profilePicture', 'user2', 'user2__username', 'user2__profilePicture')
             else:
-                friends=UserFriend.objects.filter(Q(user1=request.user['id']) | Q(user2=request.user['id'])).values('id', 'user1', 'user1__username', 'user1__profilePicture', 'user2', 'user2__username', 'user2__profilePicture')
+                friends=UserFriend.objects.filter(Q(user1=request.user) | Q(user2=request.user)).values('id', 'user1', 'user1__username', 'user1__profilePicture', 'user2', 'user2__username', 'user2__profilePicture')
             return Response({"friends":friends}, status=status.HTTP_200_OK)
     
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 @api_view(['PUT'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def updateFriendStatus(request):
     try:
@@ -486,11 +492,11 @@ def updateFriendStatus(request):
                     return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
                 
                 friend=UserFriend.objects.select_related('user1', 'user2').get(id=request.data['id'])
-                if friend.user1.id!=request.user['id'] and friend.user2.id!=request.user['id']:
+                if friend.user1.id!=request.user.id and friend.user2.id!=request.user.id:
                     return Response({'error': 'Friend not found'}, status=status.HTTP_404_NOT_FOUND)
                 
                 if friend.status=='blocked':
-                    if friend.by!=str(request.user['id']):
+                    if friend.by!=str(request.user.id):
                         return Response({'error': 'You are not authorized to unblock this friend'}, status=status.HTTP_401_UNAUTHORIZED)
                     else:
                         friend.status='removed'
@@ -500,7 +506,7 @@ def updateFriendStatus(request):
                     return Response({'error': 'Friend not found'}, status=status.HTTP_404_NOT_FOUND)
                 else:
                     friend.status=resStatus
-                    friend.by=request.user['id']
+                    friend.by=request.user.id
                     friend.save()
                     
                         
@@ -512,7 +518,7 @@ def updateFriendStatus(request):
                         'type': 'chat_message',
                         'id': friend.id,
                         'status': resStatus,
-                        'by': request.user['id']
+                        'by': request.user.id
                         }
                     )
 
@@ -533,7 +539,7 @@ def updateFriendStatus(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 @api_view(['GET'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def getFriendToken(request): #? Change this to request, friendId 
     try:
@@ -544,17 +550,17 @@ def getFriendToken(request): #? Change this to request, friendId
             try:
                 begin=time.time()
                 # ? check if this is faster :: select_related is faster 
-                userFriend=UserFriend.objects.select_related('user1', 'user2').get(Q(user1=request.user['id'], user2__id=query) | Q(user2=request.user['id'], user1__id=query))
+                userFriend=UserFriend.objects.select_related('user1', 'user2').get(Q(user1=request.user.id, user2__id=query) | Q(user2=request.user.id, user1__id=query))
             except:
                 return Response({'error': 'Friend not found'}, status=status.HTTP_404_NOT_FOUND)
             
             if userFriend.status=='blocked':
-                if userFriend.by!=str(request.user['id']):
+                if userFriend.by!=str(request.user.id):
                     return Response({'error': 'You are blocked by this user'}, status=status.HTTP_401_UNAUTHORIZED)
             elif userFriend.status=='removed':
                 return Response({'error': 'Friend not found'}, status=status.HTTP_404_NOT_FOUND)
             
-            token=TokenObtainSerializerP2P.get_token(request.user.instance, userFriend)
+            token=TokenObtainSerializerP2P.get_token(request.user, userFriend)
             
             # UserChat.objects.create(user1=userFriend.user1, user2=userFriend.user2, friend=userFriend, message='test')
             end=time.time()
@@ -568,7 +574,7 @@ def getFriendToken(request): #? Change this to request, friendId
 
     
 class GroupViews(APIView):
-    authentication_classes=[CustomAuthentication]
+    authentication_classes=[Authentication]
     permission_classes=[IsAuthenticatedAndVerified]
     
     def get(self, request):
@@ -596,13 +602,13 @@ class GroupViews(APIView):
                 'groupName': request.data['groupName'],
                 'groupDescription': request.data['groupDescription'] if 'groupDescription' in request.data else None,
                 'groupPicture': request.data['groupPicture'] if 'groupPicture' in request.data else None,
-                'createdBy': request.user['id'],
+                'createdBy': request.user.id,
                 'groupPassword': request.data['groupPassword'],
             }
             serializer=GroupSerializer(data=data, context={'request': request})
             if serializer.is_valid():
                 serializer.save()
-                UserGroup.objects.create(user=request.user.instance, group=serializer.instance, status='admin')
+                UserGroup.objects.create(user=request.user, group=serializer.instance, status='admin')
                 
                 return Response({'msg': 'Group created successfully', 'group': serializer.data}, status=status.HTTP_201_CREATED)
                             
@@ -620,7 +626,7 @@ class GroupViews(APIView):
 
             begin=time.time()
             try:
-                groupUser=UserGroup.objects.select_related('group').get(user=request.user['id'], group__id=request.data['groupId'], status__in=['admin', 'member'],group__is_deleted=False)
+                groupUser=UserGroup.objects.select_related('group').get(user=request.user, group__id=request.data['groupId'], status__in=['admin', 'member'],group__is_deleted=False)
             except Exception as e:
                 print(e)
                 return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -634,10 +640,11 @@ class GroupViews(APIView):
                 data={
                     'groupName': request.data['groupName'],
                     'groupDescription': request.data['groupDescription'],
-                    'groupPicture': request.data['groupPicture'] if 'groupPicture' in request.data else None,
+                    'groupPicture': request.data['groupPicture'] if 'groupPicture' in request.data else groupUser.group.groupPicture,
                 }
 
-                if groupUser.group.createdBy==request.user.instance:
+                if groupUser.group.createdBy==request.user:
+                    # print('created by user')
                     data['groupPassword']=request.data['groupPassword']
                 
                 
@@ -667,7 +674,7 @@ class GroupViews(APIView):
             except:
                 return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
             
-            if group.createdBy!=request.user.instance:
+            if group.createdBy!=request.user:
                 return Response({'error': 'You are not authorized to delete this group'}, status=status.HTTP_401_UNAUTHORIZED)
             
             group.soft_delete()
@@ -678,7 +685,7 @@ class GroupViews(APIView):
         
 
 @api_view(['POST'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def joinGroup(request):
     try:
@@ -693,7 +700,7 @@ def joinGroup(request):
         
         begin=time.time()
         try:
-            groupUser=group.usergroup_set.get(user=request.user.instance)
+            groupUser=group.usergroup_set.get(user=request.user)
             print(time.time()-begin)
             
             # begin=time.time()
@@ -712,7 +719,7 @@ def joinGroup(request):
             
             #? Which one is better? 2nd one is faster by few milliseconds
             # UserGroup.objects.create(user=request.user.instance, group=group, status='member')
-            group.usergroup_set.create(user=request.user.instance, status='member')
+            group.usergroup_set.create(user=request.user, status='member')
             print(time.time()-begin)
             return Response({'msg': 'You have joined the group successfully'}, status=status.HTTP_200_OK)
             
@@ -721,7 +728,7 @@ def joinGroup(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 @api_view(['PATCH'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def leaveGroup(request):
     try:
@@ -729,17 +736,17 @@ def leaveGroup(request):
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         
         try:
-            groupUser=UserGroup.objects.select_related('group').get(user=request.user["id"], group__id=request.data['groupId'], group__is_deleted=False, status__in=['admin', 'member'])
+            groupUser=UserGroup.objects.select_related('group').get(user=request.user, group__id=request.data['groupId'], group__is_deleted=False, status__in=['admin', 'member'])
         except:
             return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        if groupUser.group.createdBy==request.user.instance:
+        if groupUser.group.createdBy==request.user:
             return Response({'error': 'You cannot leave the group as you are the creator'}, status=status.HTTP_401_UNAUTHORIZED)
             
         groupUser.status='left'
         groupUser.save()
         
-        disconnectGroupUser(request.user["id"], request.data['groupId'], 'left')
+        disconnectGroupUser(request.user.id, request.data['groupId'], 'left')
         
         return Response({'msg': 'You have left the group successfully'}, status=status.HTTP_200_OK)
     
@@ -748,7 +755,7 @@ def leaveGroup(request):
 
 
 @api_view(['PUT'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def updateGroupUserStatus(request):
     try:
@@ -757,14 +764,14 @@ def updateGroupUserStatus(request):
         if not request.user:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        if request.data['userId']==str(request.user["id"]):
+        if request.data['userId']==str(request.user.id):
             return Response({'error': 'You cannot update your own status'}, status=status.HTTP_401_UNAUTHORIZED)
         
         if request.data['status']!='admin' and request.data['status']!='member' and request.data['status']!='kicked':
             return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            groupUser=UserGroup.objects.select_related('group').get(user=request.user["id"], group__id=request.data['groupId'], group__is_deleted=False, status__in=['admin', 'member'])
+            groupUser=UserGroup.objects.select_related('group').get(user=request.user, group__id=request.data['groupId'], group__is_deleted=False, status__in=['admin', 'member'])
         except:
             return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
     
@@ -834,7 +841,7 @@ def disconnectGroupUser(user, group, status):
 
 
 @api_view(['GET'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def getGroupUsers(request, groupId):
     try:
@@ -843,12 +850,12 @@ def getGroupUsers(request, groupId):
         
         begin=time.time()
         try:
-            groupUser=UserGroup.objects.select_related('group').get(user=request.user["id"], group__id=groupId, group__is_deleted=False, status__in=['admin', 'member'])
+            groupUser=UserGroup.objects.select_related('group').get(user=request.user, group__id=groupId, group__is_deleted=False, status__in=['admin', 'member'])
         except:
             return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
         
        
-        users=groupUser.group.usergroup_set.select_related('user').filter(~Q(user__id=request.user["id"]),status__in=['admin', 'member'],).values('user__id', 'user__username',  'user__profilePicture', 'status')
+        users=groupUser.group.usergroup_set.select_related('user').filter(~Q(user=request.user),status__in=['admin', 'member'],).values('user__id', 'user__username',  'user__profilePicture', 'status')
         
         print(time.time()-begin)
         return Response({'users': users}, status=status.HTTP_200_OK)
@@ -857,7 +864,7 @@ def getGroupUsers(request, groupId):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 @api_view(['POST'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def createGroupInviteLink(request):
     try:
@@ -866,7 +873,7 @@ def createGroupInviteLink(request):
         
         begin=time.time()
         try:
-            groupUser=UserGroup.objects.select_related('group').get(user=request.user["id"], group__id=request.data['groupId'], group__is_deleted=False, status__in=['admin', 'member'])
+            groupUser=UserGroup.objects.select_related('group').get(user=request.user, group__id=request.data['groupId'], group__is_deleted=False, status__in=['admin', 'member'])
         except:
             return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -891,7 +898,7 @@ def createGroupInviteLink(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 @api_view(['GET'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def joinGroupViaInviteLink(request, slug):
     try:
@@ -905,7 +912,7 @@ def joinGroupViaInviteLink(request, slug):
             return Response({'error': 'Invite link not found or expired'}, status=status.HTTP_404_NOT_FOUND)
         
         try:
-            groupUser=UserGroup.objects.get(user=request.user["id"], group__id=inviteLink.group.id, group__is_deleted=False)
+            groupUser=UserGroup.objects.get(user=request.user, group__id=inviteLink.group.id, group__is_deleted=False)
             
             if groupUser.status=='admin' or groupUser.status=='member':
                 return Response({'error': 'You are already a member of this group'}, status=status.HTTP_400_BAD_REQUEST)
@@ -924,7 +931,7 @@ def joinGroupViaInviteLink(request, slug):
 
 
 @api_view(['GET'])
-@authentication_classes([CustomAuthentication])
+@authentication_classes([Authentication])
 @permission_classes([IsAuthenticatedAndVerified])
 def getGroupToken(request,groupId):
     try:
@@ -933,11 +940,11 @@ def getGroupToken(request,groupId):
         
         begin=time.time()
         try:
-            groupUser=UserGroup.objects.select_related('group').get(user=request.user["id"], group__id=groupId, group__is_deleted=False, status__in=['admin', 'member'])
+            groupUser=UserGroup.objects.select_related('group').get(user=request.user, group__id=groupId, group__is_deleted=False, status__in=['admin', 'member'])
         except:
             return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        token=TokenObtainSerializerP2G.get_token(request.user.instance, groupUser.id)
+        token=TokenObtainSerializerP2G.get_token(request.user, groupUser.id)
         
         end=time.time()
         print(end-begin)

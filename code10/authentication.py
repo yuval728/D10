@@ -11,8 +11,29 @@ from rest_framework import permissions, status, exceptions
 
 
 
-class CustomAuthentication(BaseAuthentication):
-    def authenticate(self, request):
+# class CustomAuthentication(BaseAuthentication):
+#     def authenticate(self, request):
+#         try:
+#             # print(request.headers['Authorization'])
+#             token= request.headers['Authorization'].split(' ')[1]
+#             if not token:
+#                 return None
+#             tokenBackend= TokenBackend(algorithm='HS256')
+#             valid_data= tokenBackend.decode(token,verify=False)
+#             try:
+#                 instance= User.objects.get(id=valid_data['user_id'], email=valid_data['email'])
+#             except User.DoesNotExist:
+#                 raise exceptions.AuthenticationFailed('User not found')
+            
+#             user= UserSerializer(instance).data
+#             user.instance= instance # ? check if this is needed
+#             user.is_authenticated= True
+#             return (user, None)
+#         except Exception as e:
+#             return None
+        
+class Authentication(BaseAuthentication):
+      def authenticate(self, request):
         try:
             # print(request.headers['Authorization'])
             token= request.headers['Authorization'].split(' ')[1]
@@ -21,21 +42,19 @@ class CustomAuthentication(BaseAuthentication):
             tokenBackend= TokenBackend(algorithm='HS256')
             valid_data= tokenBackend.decode(token,verify=False)
             try:
-                instance= User.objects.get(id=valid_data['user_id'], email=valid_data['email'])
+                user= User.objects.get(id=valid_data['user_id'], email=valid_data['email'])
             except User.DoesNotExist:
                 raise exceptions.AuthenticationFailed('User not found')
             
-            user= UserSerializer(instance).data
-            user.instance= instance # ? check if this is needed
+            # user= instance
             user.is_authenticated= True
             return (user, None)
         except Exception as e:
-            return None
-        
+            return None  
         
 class IsAuthenticatedAndVerified(permissions.BasePermission):
     def has_permission(self, request, view):
-        if request.user and request.user.is_authenticated and request.user['verified']:
+        if request.user and request.user.is_authenticated and request.user.verified:
             return True
         return False
 
